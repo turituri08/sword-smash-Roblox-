@@ -70,9 +70,8 @@ tool.Activated:Connect(function()
 	canHit = true
 	hasHitThisSwing = false
 
-	-- Hitboxはまだ振りの軌道に合わせておらず大きいため、押した瞬間に既に重なっているものも
-	-- 直接チェックする
-	-- （Touchedは「新しく触れた瞬間」しか発火しないため、これだけでは検出漏れが起きる）
+	-- 相手に密着して振ると、振り始めの時点で既にHitboxが重なっていることがある。
+	-- Touchedは「新しく触れた瞬間」しか発火しないため、押した瞬間の重なりも直接チェックする
 	for _, part in ipairs(hitbox:GetTouchingParts()) do
 		tryHit(part)
 	end
