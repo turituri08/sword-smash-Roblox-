@@ -70,8 +70,8 @@ tool.Activated:Connect(function()
 	canHit = true
 	hasHitThisSwing = false
 
-	-- まだスイングアニメーションが無く、バットが静止しているため、
-	-- ボタンを押した瞬間に既に重なっているものも直接チェックする
+	-- Hitboxはまだ振りの軌道に合わせておらず大きいため、押した瞬間に既に重なっているものも
+	-- 直接チェックする
 	-- （Touchedは「新しく触れた瞬間」しか発火しないため、これだけでは検出漏れが起きる）
 	for _, part in ipairs(hitbox:GetTouchingParts()) do
 		tryHit(part)
