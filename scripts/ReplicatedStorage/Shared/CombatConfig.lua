@@ -8,6 +8,7 @@ local CombatConfig = {}
 CombatConfig.Swing = {
 	AnimationId = "rbxassetid://522635514", -- Roblox標準の振り下ろし。Roblox所有なので自分で公開しなくても再生できる
 	AnimationSpeed = 1.5, -- 再生速度の倍率（1で標準の0.5秒、1.5で約0.33秒）
+	FadeTime = 0.1,       -- 構えから振りへ切り替える秒数
 	HitWindow = 0.3,      -- 離してから当たり判定が有効な秒数
 	Cooldown = 0.4,       -- 当たり判定が終わってから、次に溜め始められるまでの秒数
 }
@@ -30,6 +31,8 @@ CombatConfig.Charge = {
 		{ Time = 1.5, Multiplier = 1.5 },
 	},
 	WalkSpeedMultiplier = 0.5, -- 溜め中の歩く速さ（0.5で半分）
+	AnimationId = "rbxassetid://121924975433552", -- 溜め中の構え（振りかぶり）。自分のアカウントで公開したもの
+	AnimationFadeTime = 0.2, -- 構えの姿勢へ移るまでの秒数（なめらかに振りかぶる）
 }
 
 -- 溜めの演出。Stages の各行は Charge.Stages の同じ段階に対応する

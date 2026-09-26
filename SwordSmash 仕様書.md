@@ -189,6 +189,7 @@ distance = power² × sin(2θ) / workspace.Gravity
 - R2を押す（`Tool.Activated`）と溜め開始、離す（`Tool.Deactivated`）と振る。どちらのイベントもサーバーで直接受け取れるため、RemoteEventは使わず、プレイヤー側から秒数も送らない
 - サーバーが `os.clock()` の差分で秒数を測る。最大段階に達したら離すまでその段階を保つ
 - 溜め中は歩く速さが落ちる（`CombatConfig.Charge.WalkSpeedMultiplier`）
+- 溜め中は頭の後ろまで振りかぶる構えのアニメーションを再生する（`CombatConfig.Charge.AnimationId`）。自作してゲーム所有者のアカウントで公開したもの。動かすのは上半身だけなので、溜め中に歩いても脚は歩く動きのまま。ゲームをグループ所有に移す場合は、グループで公開し直してIDを差し替える必要がある
 - 段階は演出として、体の光（Highlight）、周囲の照明（PointLight）、段階が上がった瞬間の粒（ParticleEmitter）、コントローラーの振動で示す
 - 溜め速度スキルは「秒数」ではなく「溜まる速さ（rate）」に作用させる
 
