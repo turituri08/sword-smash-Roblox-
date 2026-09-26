@@ -108,16 +108,39 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 
 ### ファイル構成と配置
 
-| ファイル       | Studio上の配置           | 種類         | 状態                          |
-| -------------- | ------------------------ | ------------ | ----------------------------- |
-| `CombatConfig` | ReplicatedStorage/Shared | ModuleScript | 作成済み                      |
-| `Knockback`    | ReplicatedStorage/Shared | ModuleScript | 作成済み                      |
-| `PowerLevel`   | ReplicatedStorage/Shared | ModuleScript | 作成済み                      |
-| `SwordService` | ServerScriptService      | Script       | 作成済み（getSkillsが仮実装） |
-| `PlayerData`   | ServerScriptService      | ModuleScript | 作成済み                      |
-| `SwordClient`  | Tool の中                | LocalScript  | 作成済み                      |
+| ファイル            | Studio上の配置           | 種類         | 状態                                   |
+| ------------------- | ------------------------ | ------------ | -------------------------------------- |
+| `CombatConfig`      | ReplicatedStorage/Shared | ModuleScript | 作成済み（振り・吹っ飛ばし・溜めの値） |
+| `ChargeStages`      | ReplicatedStorage/Shared | ModuleScript | 作成済み                               |
+| `Knockback`         | ReplicatedStorage/Shared | ModuleScript | 未作成                                 |
+| `PowerLevel`        | ReplicatedStorage/Shared | ModuleScript | 未作成                                 |
+| `CharacterLauncher` | ServerScriptService      | ModuleScript | 作成済み                               |
+| `ChargeEffects`     | ServerScriptService      | ModuleScript | 作成済み                               |
+| `SwordService`      | ServerScriptService      | Script       | 未作成（当面は Bat の Script が担う）  |
+| `PlayerData`        | ServerScriptService      | ModuleScript | 未作成                                 |
+| `SwordClient`       | Tool の中                | LocalScript  | 未作成（当面は Bat の LocalScript が担う） |
 
 Rojo移行時のパス：`src/shared/`、`src/server/`、`src/client/`。
+
+### フォルダ構成の方針と意図
+
+**1ファイル1責務**で分割し、ModuleScript を `require()` して組み合わせる（Webのモジュールと import に相当）。
+
+- **Script / LocalScript はエントリポイント**。イベントを受けてモジュールを呼び、プレイヤーごとの状態（溜め中か等）を持つ
+- **ModuleScript は状態を持たない関数の集まり**にする。サーバー上ではモジュールは全プレイヤーで1つの実体を共有するため、状態を持たせるとプレイヤー間で混ざる
+- **置き場所は「誰が読むか」で決める**
+  - `ReplicatedStorage/Shared`：サーバーとプレイヤー側の両方が使うもの（調整値、計算のみの処理）
+  - `ServerScriptService`：サーバーだけが使うもの。プレイヤー側からは中身も見えないため、チート対策上守りたいロジックはここに置く
+- **調整値は `CombatConfig` に集約**し、値を変えるだけで挙動が変わるようにする。サーバーとプレイヤー側で同じ値を重複して書かない
+
+git管理用の写し（`scripts/`）は、**Studio上の場所をそのまま映したフォルダ構成**にする。どのファイルがStudioのどこにあるかが一目で分かり、Rojo移行時もフォルダ単位で対応付けられる。
+
+```
+scripts/
+  ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua
+  ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua
+  StarterPack/Bat/            Script.lua, LocalScript.lua
+```
 
 ### Toolの構成
 
@@ -162,9 +185,11 @@ distance = power² × sin(2θ) / workspace.Gravity
 
 ### 溜めの扱い
 
-- 溜めはスキルではなくコア機能として実装済み。スキル未所持なら倍率が1.0になる
-- クライアントは `ChargeStart` / `ChargeRelease` の2つの合図のみ送る。秒数は送らない
-- サーバーが `os.clock()` の差分で秒数を測り、上限も切る（`MaxTime + GraceSeconds`）
+- 溜めはスキルではなくコア機能として実装済み。最初から3段階（0.5秒で1.2倍、1.0秒で1.3倍、1.5秒で1.5倍）あり、段階と倍率は `CombatConfig.Charge.Stages` で変えられる。行を足せば段階が増える（段階追加スキルの土台）
+- R2を押す（`Tool.Activated`）と溜め開始、離す（`Tool.Deactivated`）と振る。どちらのイベントもサーバーで直接受け取れるため、RemoteEventは使わず、プレイヤー側から秒数も送らない
+- サーバーが `os.clock()` の差分で秒数を測る。最大段階に達したら離すまでその段階を保つ
+- 溜め中は歩く速さが落ちる（`CombatConfig.Charge.WalkSpeedMultiplier`）
+- 段階は演出として、体の光（Highlight）、周囲の照明（PointLight）、段階が上がった瞬間の粒（ParticleEmitter）、コントローラーの振動で示す
 - 溜め速度スキルは「秒数」ではなく「溜まる速さ（rate）」に作用させる
 
 ### スキルフックの契約
@@ -284,7 +309,7 @@ distance = power² × sin(2θ) / workspace.Gravity
 
 1. **叩いて飛ばす**（Tool・Hitbox・ダミーの設置、手触りの確認）← 現在ここ
 2. **飛距離の表示と記録**
-3. **溜め攻撃**（実装済み、1〜2と合わせて検証）
+3. **溜め攻撃**（3段階の溜めを実装済み。手触りを調整中）
 4. **経験値とスキルの割り振り**（UI、サーバー側の検証、振り直し）
 5. **剣のレベルアップと解放**
 6. **1日1回の抽選**（天井、重複変換）
