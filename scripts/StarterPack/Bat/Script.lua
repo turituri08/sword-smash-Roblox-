@@ -7,6 +7,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local TweenService = game:GetService("TweenService")
+local ContentProvider = game:GetService("ContentProvider")
 
 local CombatConfig = require(ReplicatedStorage.Shared.CombatConfig)
 local ChargeStages = require(ReplicatedStorage.Shared.ChargeStages)
@@ -18,6 +20,19 @@ local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
 local distanceResultEvent = ReplicatedStorage.Remotes.DistanceResult
 
+-- サーバーは、振っているプレイヤーから届いたアニメーションで Hitbox の位置を計算する。
+-- アニメーションを初めて再生するときは読み込みが終わるまでバットが動かず、最初の一振りだけ当たり判定が遅れるため、
+-- 先に読み込んでおく
+task.spawn(function()
+	local animations = {}
+	for _, animationId in ipairs({ CombatConfig.Swing.AnimationId, CombatConfig.Charge.AnimationId }) do
+		local animation = Instance.new("Animation")
+		animation.AnimationId = animationId
+		table.insert(animations, animation)
+	end
+	ContentProvider:PreloadAsync(animations)
+end)
+
 -- 溜めの状態
 local chargingCharacter = nil -- 溜め中のキャラクター（溜めていなければnil）
 local chargeStartTime = 0
@@ -28,7 +43,8 @@ local originalWalkSpeed = 16
 local isSwinging = false      -- 振ってからクールダウンが終わるまでtrue。この間は溜め始められない
 local canHit = false          -- 当たり判定が有効な間だけtrue
 local hasHitThisSwing = false -- 1回の振りにつき1体だけ吹き飛ばす
-local swingMultiplier = 1     -- 今の振りにかかる溜め倍率
+local swingStage = 0          -- 今の振りの溜め段階
+local pushEndTime = 0         -- 押し込みが終わって相手が飛ぶ時刻。クールダウンはこれより後から数える
 
 -- 段階はキャラクターの属性にも書いておき、プレイヤー側（コントローラーの振動）から読めるようにする
 local function setChargeStage(character, stage)
@@ -108,25 +124,66 @@ local function tryHit(hitPart)
 	local direction = Vector3.new(offset.X, 0, offset.Z)
 	direction = if direction.Magnitude > 0 then direction.Unit else attacker.HumanoidRootPart.CFrame.LookVector
 
-	local power, angle = Knockback.resolve(swingMultiplier)
-	CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle))
-	reportDistance(attacker, target, direction, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
+	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage))
+	local function launchTarget()
+		if not target.Parent then return end -- 押し込んでいる間に対象が消えた（リスポーンなど）
+		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle))
+		-- 飛距離の表示は吹き飛んでから始める（数字と小画面が実際の飛び出しと揃う）
+		reportDistance(attacker, target, direction, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
+	end
+
+	-- 押し込み: 当たった瞬間の引っかかり（ImpactDuration 秒）の間に、相手を叩かれた向きへ押し込み、
+	-- 上体を後ろへ傾けてから吹き飛ばす。引っかかりが終わる少し手前、LaunchAt の割合の時点で飛ばす。
+	-- 叩いた人の振りは、プレイヤー側が自分で当たりを判定して同じ時間だけゆっくり再生する
+	-- （サーバーからの通知を待つと、通信の遅れのぶん減速が遅れるため）
+	local feedback = ChargeStages.getHitFeedback(swingStage)
+	if feedback.ImpactDuration <= 0 then
+		launchTarget()
+		return
+	end
+
+	local tiltAxis = Vector3.yAxis:Cross(direction) -- この軸で回すと、頭が叩かれた向きへ倒れる
+	local pushedCFrame = CFrame.new(targetRoot.Position + direction * feedback.PushDistance)
+		* CFrame.fromAxisAngle(tiltAxis, math.rad(CombatConfig.HitFeedback.PushTilt))
+		* targetRoot.CFrame.Rotation
+	-- 固定した HumanoidRootPart を動かすと、関節でつながった体全体がついてくる。
+	-- 一定の速さ（Linear）で押し込み、押している間ずっと相手が動いて見えるようにする（途中で止まると固まって見える）
+	local pushTime = feedback.ImpactDuration * CombatConfig.HitFeedback.LaunchAt
+	pushEndTime = os.clock() + pushTime
+	targetRoot.Anchored = true
+	TweenService:Create(targetRoot, TweenInfo.new(pushTime, Enum.EasingStyle.Linear), {
+		CFrame = pushedCFrame,
+	}):Play()
+
+	task.delay(pushTime, function()
+		targetRoot.Anchored = false
+		launchTarget()
+	end)
 end
 
 local function swing(stage)
 	isSwinging = true
-	swingMultiplier = ChargeStages.getMultiplier(stage)
-	canHit = true
+	swingStage = stage
 	hasHitThisSwing = false
+	pushEndTime = 0
 
-	-- 相手に密着して振ると、振り始めの時点で既にHitboxが重なっていることがある。
-	-- Touchedは「新しく触れた瞬間」しか発火しないため、振った瞬間の重なりも直接チェックする
-	for _, part in ipairs(hitbox:GetTouchingParts()) do
+	-- 振り下ろしが進んでから当たり判定を始める
+	local hitStart, hitEnd = ChargeStages.getHitWindow(stage)
+	task.wait(hitStart)
+	canHit = true
+	-- 判定を始めた時点で既にHitboxが相手に重なっていることが多い。
+	-- Touchedは「新しく触れた瞬間」しか発火しないため、その時点の重なりも直接調べる
+	for _, part in ipairs(workspace:GetPartsInPart(hitbox)) do
 		tryHit(part)
 	end
 
-	task.wait(CombatConfig.Swing.HitWindow)
+	task.wait(hitEnd - hitStart)
 	canHit = false
+	-- 押し込み中なら相手が飛ぶまで待ってから、クールダウンを数える（押し込み中に次の溜めを始めさせない）
+	local remainingPush = pushEndTime - os.clock()
+	if remainingPush > 0 then
+		task.wait(remainingPush)
+	end
 	task.wait(CombatConfig.Swing.Cooldown)
 	isSwinging = false
 end
