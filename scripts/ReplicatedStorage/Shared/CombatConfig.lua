@@ -32,10 +32,13 @@ CombatConfig.HitFeedback = {
 		-- PushDistance: その間に相手を叩かれた向きへ押し込む距離（stud）
 		-- ShakeAngle: 叩いた人のカメラを揺らす最大の角度（度）
 		-- Vibration: 当たってから引っかかりが終わるまでの、コントローラーの振動の強さ（0〜1）
-		[0] = { ImpactDuration = 0, PushDistance = 0, ShakeAngle = 0.4, Vibration = 0.3 },
-		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5 },
-		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75 },
-		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1 },
+		-- FlashSize / RingSize: 当たった場所の閃光・衝撃波の輪が広がり切ったときの大きさ（stud）
+		-- SparkCount: 当たった場所から飛び散る火花の数
+		-- 溜めなし（0）の当たりには揺れ・振動・当たった場所の演出を出さないので、その値は持たない
+		[0] = { ImpactDuration = 0, PushDistance = 0 },
+		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, FlashSize = 4, RingSize = 6, SparkCount = 14 },
+		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, FlashSize = 5, RingSize = 8, SparkCount = 22 },
+		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, FlashSize = 7, RingSize = 11, SparkCount = 35 },
 	},
 	PushTilt = 15, -- 押し込む間に相手の上体を後ろへ傾ける角度（度）
 	-- 引っかかりの時間のうち、この割合の時点で相手を飛ばす（振り抜き始める少し手前）。
@@ -48,6 +51,19 @@ CombatConfig.HitFeedback = {
 		TrembleRatio = 0.25,    -- 引っかかりの間に続く震えの強さ（ShakeAngle に対する割合）
 		LaunchPulseRatio = 0.5, -- 相手が飛ぶ瞬間の揺れの強さ（ShakeAngle に対する割合）
 		SideRatio = 0.3,        -- 横の揺れの強さ（縦の揺れに対する割合）
+	},
+	-- 当たった場所の閃光・衝撃波の輪・火花（全段階で共通）。色は溜めの段階色、大きさと数は Stages で段階ごとに決める
+	Effect = {
+		FlashTime = 0.15,    -- 閃光が広がって消えるまでの秒数
+		RingTime = 0.25,     -- 衝撃波の輪が広がって消えるまでの秒数
+		LightBrightness = 5, -- 周りを一瞬照らす光の明るさ
+		LightRange = 12,
+		SparkSpeedMin = 15,  -- 火花の飛ぶ速さ（stud/秒）
+		SparkSpeedMax = 30,
+		SparkLifetime = 0.4, -- 火花が消えるまでの秒数
+		SparkSpread = 35,    -- 火花が広がる角度（度）。相手が飛ぶ向きを中心にした円錐
+		SparkSize = 0.3,
+		SparkGravity = 40,   -- 火花を下へ引く強さ
 	},
 }
 

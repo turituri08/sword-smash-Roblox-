@@ -1,6 +1,6 @@
 -- Studio配置: StarterPack > Bat (Tool) > LocalScript（プレイヤー側で実行される）
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
---       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動もここで出す。
+--       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の閃光などもここで出す。
 --       ボタンへの反応を遅らせないよう、サーバーを経由せずここで再生する
 --       （自分のキャラクターのアニメーションは、プレイヤー側で再生しても他のプレイヤーに同期される）。
 --       溜めの秒数や段階、当たり・吹き飛ばしの判定はサーバー側のScriptが行い、ここでは見た目と手触りだけを扱う。
@@ -12,6 +12,8 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local ChargeStages = require(Shared:WaitForChild("ChargeStages"))
+local Knockback = require(Shared:WaitForChild("Knockback"))
+local HitEffects = require(Shared:WaitForChild("HitEffects"))
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
@@ -58,9 +60,8 @@ end
 local SHAKE_BINDING = "HitShake"
 local function shakeCamera(angle, catchDuration)
 	local shake = CombatConfig.HitFeedback.Shake
-	-- 引っかからない振り（溜めなし）は当たった瞬間に飛ぶので、揺れは1回だけ
-	local launchTime = if catchDuration > 0 then catchDuration * CombatConfig.HitFeedback.LaunchAt else nil
-	local endTime = math.max(catchDuration, (launchTime or 0) + shake.DecayTime)
+	local launchTime = catchDuration * CombatConfig.HitFeedback.LaunchAt
+	local endTime = math.max(catchDuration, launchTime + shake.DecayTime)
 	local startedAt = os.clock()
 
 	RunService:UnbindFromRenderStep(SHAKE_BINDING) -- 前の揺れが残っていれば、新しい揺れに置き換える
@@ -75,9 +76,7 @@ local function shakeCamera(angle, catchDuration)
 		if elapsed < catchDuration then
 			strength = math.max(strength, shake.TrembleRatio)
 		end
-		if launchTime then
-			strength += shake.LaunchPulseRatio * decay(elapsed - launchTime, shake.DecayTime)
-		end
+		strength += shake.LaunchPulseRatio * decay(elapsed - launchTime, shake.DecayTime)
 		-- 振り下ろしに合わせて主に上下に揺らす。横は周期をずらして少しだけ揺らし、単調な往復に見えないようにする
 		local phase = elapsed * shake.Frequency * 2 * math.pi
 		local pitch = angle * strength * math.sin(phase)
@@ -150,15 +149,21 @@ local function predictHit(hitPart)
 	local character = tool.Parent
 	local target = hitPart.Parent
 	if not target or target == character or not target:FindFirstChildOfClass("Humanoid") then return end
+	local targetRoot = target:FindFirstChild("HumanoidRootPart")
+	if not targetRoot then return end
 
 	hasPredictedHit = true
 	local feedback = ChargeStages.getHitFeedback(swingStage)
 	local duration = feedback.ImpactDuration
 	catchSwing(duration)
-	shakeCamera(feedback.ShakeAngle, duration)
-	-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す。
-	-- 引っかからない振りは、当たった瞬間の揺れと同じ長さだけ振動させる
-	vibrate(feedback.Vibration, if duration > 0 then duration else CombatConfig.HitFeedback.Shake.DecayTime)
+	-- 溜めなしの軽い当たりには、揺れ・振動・当たった場所の演出を出さない（溜めた一撃との差を出す）
+	if swingStage > 0 then
+		shakeCamera(feedback.ShakeAngle, duration)
+		local direction = Knockback.getDirection(character.HumanoidRootPart, targetRoot)
+		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage)
+		-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す
+		vibrate(feedback.Vibration, duration)
+	end
 	-- サーバー側と同じく、押し込み中（相手が飛ぶまで）は次の溜めを始められない
 	local launchDelay = duration * CombatConfig.HitFeedback.LaunchAt
 	nextChargeAllowedAt = math.max(nextChargeAllowedAt, os.clock() + launchDelay + CombatConfig.Swing.Cooldown)

@@ -15,6 +15,14 @@ function Knockback.resolve(chargeMultiplier)
 	return power, launch.Angle
 end
 
+-- 叩く向き（水平方向の単位ベクトル）。高さの差が混ざると、飛距離の計算値と実際の飛び方がずれるため水平だけにする。
+-- 真上や真下に重なっていて向きが決まらないときは、叩いた人の正面を使う
+function Knockback.getDirection(attackerRoot, targetRoot)
+	local offset = targetRoot.Position - attackerRoot.Position
+	local direction = Vector3.new(offset.X, 0, offset.Z)
+	return if direction.Magnitude > 0 then direction.Unit else attackerRoot.CFrame.LookVector
+end
+
 -- direction は水平方向の単位ベクトル。高さの成分が混ざると計算値と飛び方がずれる
 function Knockback.getVelocity(direction, power, angle)
 	local radians = math.rad(angle)

@@ -13,12 +13,14 @@ local ContentProvider = game:GetService("ContentProvider")
 local CombatConfig = require(ReplicatedStorage.Shared.CombatConfig)
 local ChargeStages = require(ReplicatedStorage.Shared.ChargeStages)
 local Knockback = require(ReplicatedStorage.Shared.Knockback)
+local HitEffects = require(ReplicatedStorage.Shared.HitEffects)
 local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
 local distanceResultEvent = ReplicatedStorage.Remotes.DistanceResult
+local hitEffectEvent = ReplicatedStorage.Remotes.HitEffect
 
 -- サーバーは、振っているプレイヤーから届いたアニメーションで Hitbox の位置を計算する。
 -- アニメーションを初めて再生するときは読み込みが終わるまでバットが動かず、最初の一振りだけ当たり判定が遅れるため、
@@ -119,10 +121,19 @@ local function tryHit(hitPart)
 
 	hasHitThisSwing = true
 
-	-- 向きは水平成分だけにする。相手との高さの差が混ざると、飛距離の計算値と実際の飛び方がずれる
-	local offset = targetRoot.Position - attacker.HumanoidRootPart.Position
-	local direction = Vector3.new(offset.X, 0, offset.Z)
-	direction = if direction.Magnitude > 0 then direction.Unit else attacker.HumanoidRootPart.CFrame.LookVector
+	local direction = Knockback.getDirection(attacker.HumanoidRootPart, targetRoot)
+
+	-- 当たった場所の閃光などを、叩いた本人以外の画面に出させる（本人は自分の当たりの予測から先に出している）。
+	-- 溜めなしの軽い当たりには演出を出さない
+	if swingStage > 0 then
+		local contactPoint = HitEffects.getContactPoint(hitPart, hitbox.Position)
+		local attackerPlayer = Players:GetPlayerFromCharacter(attacker)
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= attackerPlayer then
+				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage)
+			end
+		end
+	end
 
 	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage))
 	local function launchTarget()

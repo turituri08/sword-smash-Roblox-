@@ -110,10 +110,12 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 
 | ファイル            | Studio上の配置           | 種類         | 状態                                   |
 | ------------------- | ------------------------ | ------------ | -------------------------------------- |
-| `CombatConfig`      | ReplicatedStorage/Shared | ModuleScript | 作成済み（振り・吹っ飛ばし・溜め・飛距離表示の値） |
+| `CombatConfig`      | ReplicatedStorage/Shared | ModuleScript | 作成済み（振り・当たった瞬間の手応え・吹っ飛ばし・溜め・飛距離表示の値） |
 | `ChargeStages`      | ReplicatedStorage/Shared | ModuleScript | 作成済み                               |
 | `Knockback`         | ReplicatedStorage/Shared | ModuleScript | 作成済み（スキル補正・蓄積ダメージは未対応） |
+| `HitEffects`        | ReplicatedStorage/Shared | ModuleScript | 作成済み（当たった場所の閃光・衝撃波の輪・火花。演出はプレイヤー側で作る） |
 | `DistanceResult`    | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いたプレイヤーへの通知のみ） |
+| `HitEffect`         | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いた本人以外への、当たった場所の演出の知らせ） |
 | `PowerLevel`        | ReplicatedStorage/Shared | ModuleScript | 未作成                                 |
 | `CharacterLauncher` | ServerScriptService      | ModuleScript | 作成済み                               |
 | `ChargeEffects`     | ServerScriptService      | ModuleScript | 作成済み                               |
@@ -122,6 +124,7 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `SwordClient`       | Tool の中                | LocalScript  | 未作成（当面は Bat の LocalScript が担う） |
 | `DistanceDisplay`   | StarterGui/DistanceHud   | LocalScript  | 作成済み（飛距離とベスト記録の表示）   |
 | `TargetCamera`      | StarterGui/DistanceHud   | LocalScript  | 作成済み（飛ばした対象を追う左下の小画面） |
+| `HitEffectReceiver` | StarterPlayer/StarterPlayerScripts | LocalScript | 作成済み（他のプレイヤーが叩いたときの演出を出す） |
 
 Rojo移行時のパス：`src/shared/`、`src/server/`、`src/client/`。
 
@@ -140,10 +143,11 @@ git管理用の写し（`scripts/`）は、**Studio上の場所をそのまま�
 
 ```
 scripts/
-  ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua
+  ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua, HitEffects.lua
   ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua
   StarterPack/Bat/            Script.lua, LocalScript.lua
   StarterGui/DistanceHud/     DistanceDisplay.lua, TargetCamera.lua
+  StarterPlayer/StarterPlayerScripts/   HitEffectReceiver.lua
 ```
 
 ### Toolの構成
@@ -215,6 +219,17 @@ distance = power² × sin(2θ) / workspace.Gravity
 - サーバーは振っているプレイヤーから届いたアニメーションで Hitbox の位置を計算する。アニメーションを初めて再生するときは読み込みが終わるまでバットが動かず、プレイ開始後の最初の一振りだけ当たり判定が約0.25秒遅れていた。Bat の Script で振りと構えのアニメーションを先に読み込んで（`ContentProvider:PreloadAsync`）解消した
 - `ImpactTime` と `HitStartTime` は武器ではなく振りのアニメーションの性質。武器ごとの定義を作るときは `Swing` ごと各武器へ移す。`ImpactTime` の測り方：振りのアニメーションを再生しながら RightHand の高さを記録し、最も低い時点を探す（標準の振り下ろしは0.25秒）。自作アニメーションでは、振り下ろしの瞬間に KeyframeMarker を置いて読み取る方法も検討する
 - 飛距離の通知（数字と小画面）は吹き飛んでから送る。記録する値は変わらない
+- 溜めなしの軽い当たりには、カメラの揺れ・振動・当たった場所の演出をどれも出さない（溜めた一撃との差を出す）
+- **カメラの揺れと振動**（叩いた人だけ。空振りでは出さない）：プレイヤー側の当たりの予測をきっかけに始める
+  - 揺れ方：当たった瞬間に強く揺れ、引っかかりの間は弱く震え続け（押し込んでいる感じ）、相手が飛ぶ瞬間（`LaunchAt`）にもう一度小さく揺れる。振り下ろしに合わせて縦中心に揺らす（横は縦の `SideRatio` 倍）
+  - 強さは段階ごとの `ShakeAngle`（度）、揺れ方の共通の値は `HitFeedback.Shake`。位置ではなく角度をずらすので、カメラとの距離が変わっても見え方は同じ。標準のカメラ処理の直後（`RenderPriority.Camera + 1`）に毎フレーム傾けるので、傾きは積み重ならない
+  - 振動は引っかかりの間ずっと続け（強さは段階ごとの `Vibration`）、振り抜きと同時に止めて重さが抜ける感じを出す
+  - 溜めの段階が増えて引っかかりが長くなると、振動がしつこく感じる可能性がある。その時に調整する
+- **当たった場所の閃光・衝撃波の輪・火花**（`HitEffects`）：色は溜めの段階色。大きさと数は段階ごとの `FlashSize`・`RingSize`・`SparkCount`、共通の値は `HitFeedback.Effect`
+  - 出す場所は、叩かれた部位の表面のうち Hitbox の中心に一番近い点（部位の中心だと体に埋もれる）
+  - 衝撃波の輪は相手が飛ぶ向きに垂直な面で広がり、火花は相手が飛ぶ向き（打ち出す角度で斜め上）へ円錐状に飛び散る
+  - 叩いた本人は当たりの予測からその場で出し（カメラの揺れと重なる）、他のプレイヤーにはサーバーが当たりを決めた時点で `Remotes.HitEffect` で知らせて各自の画面で出す。対戦で「誰がどれだけの強さで叩いたか」が分かり、強化を見せる楽しさにもなる。サーバーは自分で決めた当たりでしか知らせないので、ずるをして他人の画面に演出を出させることはできない
+  - 演出はプレイヤー側で粒（ParticleEmitter）として作る。サーバーで部品の大きさを変えると、他のプレイヤーには通信の間隔でカクカク見えるため
 
 ### 溜めの扱い
 
