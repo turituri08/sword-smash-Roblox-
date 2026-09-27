@@ -26,6 +26,16 @@ CombatConfig.Launch = {
 CombatConfig.DistanceDisplay = {
 	Unit = "m",           -- 1 stud を 1 として表示する
 	ResultHoldTime = 2.5, -- 数字が止まってから消えるまでの秒数
+
+	-- 左下の小画面（飛ばした対象を後ろの右斜め上から追いかける）。数字と同じ間だけ表示する。
+	-- カメラの位置は飛ぶ向きを基準に、対象から後ろ・右・上へずらして決める
+	TargetCamera = {
+		WidthScale = 0.25,  -- 画面幅に対する小画面の幅（高さは16:9で決まる）
+		BackDistance = 7,   -- 対象より後ろ（叩いた人の側）へずらす量（stud）
+		SideDistance = 5,   -- 飛ぶ向きに対して右へずらす量（stud）
+		Height = 6,         -- 対象より上へずらす量（stud）。見下ろして飛んでいく先の地面を映す
+		FieldOfView = 50,
+	},
 }
 
 -- 溜め

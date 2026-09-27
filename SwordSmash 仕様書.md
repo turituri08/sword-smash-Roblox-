@@ -121,6 +121,7 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `PlayerData`        | ServerScriptService      | ModuleScript | 未作成                                 |
 | `SwordClient`       | Tool の中                | LocalScript  | 未作成（当面は Bat の LocalScript が担う） |
 | `DistanceDisplay`   | StarterGui/DistanceHud   | LocalScript  | 作成済み（飛距離とベスト記録の表示）   |
+| `TargetCamera`      | StarterGui/DistanceHud   | LocalScript  | 作成済み（飛ばした対象を追う左下の小画面） |
 
 Rojo移行時のパス：`src/shared/`、`src/server/`、`src/client/`。
 
@@ -142,7 +143,7 @@ scripts/
   ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua
   ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua
   StarterPack/Bat/            Script.lua, LocalScript.lua
-  StarterGui/DistanceHud/     DistanceDisplay.lua
+  StarterGui/DistanceHud/     DistanceDisplay.lua, TargetCamera.lua
 ```
 
 ### Toolの構成
@@ -195,6 +196,8 @@ distance = power² × sin(2θ) / workspace.Gravity
 - サーバーが叩いた瞬間に飛距離と滞空時間（`2 × power × sinθ / Gravity`）を計算し、`Remotes.DistanceResult` で叩いたプレイヤーにだけ送る
 - 画面上部の中央（右上のベスト記録より少し上の高さ）に「0.0 m」を出し、滞空時間をかけて一定の速さで計算値まで増やす（水平の移動は時間に比例するため、飛んでいる体の位置と数字が合う）。止まった瞬間に数字を一瞬大きくし、ベスト更新なら「NEW RECORD!」を添える
 - 1 stud を 1 m として表示する。右上にベスト記録を常に表示する
+- 遠くへ飛んで目で追えなくなる対策として、数字を表示している間は左下に小画面（画面幅の約25%、16:9）を出し、飛ばした対象を後ろ（叩いた人の側）の右斜め上から追いかけて映す。そのため `DistanceResult` では対象のキャラクターと飛ばした向きも送る
+- 小画面は ViewportFrame で作る。中に入れた物体しか描けないため、固定された部品（Baseplate等）はプレイヤー側に届いた時に1回だけ複製し（StreamingEnabled がオンのため、届く・外れるたびに合わせる）、対象は叩いた時に複製して毎フレーム本物の各部位の位置を写す。Terrain・パーティクル・照明の演出は映らない
 
 ### 溜めの扱い
 

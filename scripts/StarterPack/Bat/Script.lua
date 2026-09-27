@@ -76,9 +76,10 @@ local function stopCharge()
 end
 
 -- 飛距離を叩いたプレイヤーに知らせ、ベスト記録を更新する。
+-- 飛ばした対象と向きも送り、プレイヤー側の小画面がそれを追いかける。
 -- ベストはプレイヤーの属性に持たせる（プレイヤー側へ自動で同期され、画面表示はこれを読む）。
 -- DataStoreに保存するようになったら PlayerData.recordDistance に置き換える
-local function reportDistance(attacker, distance, flightTime)
+local function reportDistance(attacker, target, direction, distance, flightTime)
 	local player = Players:GetPlayerFromCharacter(attacker)
 	if not player then return end
 
@@ -86,7 +87,7 @@ local function reportDistance(attacker, distance, flightTime)
 	if isNewBest then
 		player:SetAttribute("BestDistance", distance)
 	end
-	distanceResultEvent:FireClient(player, distance, flightTime, isNewBest)
+	distanceResultEvent:FireClient(player, distance, flightTime, isNewBest, target, direction)
 end
 
 -- Hitboxに触れたパーツを判定し、Humanoidを持つキャラクターなら吹き飛ばす
@@ -109,7 +110,7 @@ local function tryHit(hitPart)
 
 	local power, angle = Knockback.resolve(swingMultiplier)
 	CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle))
-	reportDistance(attacker, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
+	reportDistance(attacker, target, direction, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
 end
 
 local function swing(stage)
