@@ -30,15 +30,25 @@ CombatConfig.HitFeedback = {
 		-- ImpactDuration: 当たった瞬間の引っかかりの秒数。この間、振りはほぼ止まり（CatchSpeed）、相手はじわじわ押し込まれる。
 		--                 0なら引っかからずにすぐ飛ばす（溜めない軽い振りは素早く打ち抜く）
 		-- PushDistance: その間に相手を叩かれた向きへ押し込む距離（stud）
-		[0] = { ImpactDuration = 0, PushDistance = 0 },
-		[1] = { ImpactDuration = 0.3, PushDistance = 1.0 },
-		[2] = { ImpactDuration = 0.45, PushDistance = 1.8 },
-		[3] = { ImpactDuration = 0.6, PushDistance = 2.8 },
+		-- ShakeAngle: 叩いた人のカメラを揺らす最大の角度（度）
+		-- Vibration: 当たってから引っかかりが終わるまでの、コントローラーの振動の強さ（0〜1）
+		[0] = { ImpactDuration = 0, PushDistance = 0, ShakeAngle = 0.4, Vibration = 0.3 },
+		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5 },
+		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75 },
+		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1 },
 	},
 	PushTilt = 15, -- 押し込む間に相手の上体を後ろへ傾ける角度（度）
 	-- 引っかかりの時間のうち、この割合の時点で相手を飛ばす（振り抜き始める少し手前）。
 	-- 公開環境では相手が飛ぶのが通信の往復ぶん遅れて見えるため、早めに飛ばしてその遅れを隠す
 	LaunchAt = 0.25,
+	-- カメラの揺れ方（全段階で共通）
+	Shake = {
+		Frequency = 25,         -- 1秒に揺れる回数
+		DecayTime = 0.15,       -- 当たった瞬間の揺れが収まるまでの秒数
+		TrembleRatio = 0.25,    -- 引っかかりの間に続く震えの強さ（ShakeAngle に対する割合）
+		LaunchPulseRatio = 0.5, -- 相手が飛ぶ瞬間の揺れの強さ（ShakeAngle に対する割合）
+		SideRatio = 0.3,        -- 横の揺れの強さ（縦の揺れに対する割合）
+	},
 }
 
 -- 吹っ飛ばし。溜めの倍率は BasePower にかかる（飛距離は power の2乗に比例する）

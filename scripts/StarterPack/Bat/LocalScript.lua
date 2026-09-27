@@ -1,12 +1,13 @@
 -- Studio配置: StarterPack > Bat (Tool) > LocalScript（プレイヤー側で実行される）
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
---       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。
+--       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動もここで出す。
 --       ボタンへの反応を遅らせないよう、サーバーを経由せずここで再生する
 --       （自分のキャラクターのアニメーションは、プレイヤー側で再生しても他のプレイヤーに同期される）。
 --       溜めの秒数や段階、当たり・吹き飛ばしの判定はサーバー側のScriptが行い、ここでは見た目と手触りだけを扱う。
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HapticService = game:GetService("HapticService")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
@@ -30,12 +31,59 @@ local stageConnection = nil
 local isCharging = false
 local nextChargeAllowedAt = 0
 
-local function vibrate(strength)
+-- 振動を止める予約が、後から始めた振動まで止めないように、何回目の振動かを数える
+local vibrationCount = 0
+
+local function vibrate(strength, duration)
 	local gamepad, motor = Enum.UserInputType.Gamepad1, Enum.VibrationMotor.Large
 	if not HapticService:IsMotorSupported(gamepad, motor) then return end
+	vibrationCount += 1
+	local thisVibration = vibrationCount
 	HapticService:SetMotor(gamepad, motor, strength)
-	task.delay(CombatConfig.ChargeEffects.VibrationDuration, function()
+	task.delay(duration, function()
+		if vibrationCount ~= thisVibration then return end
 		HapticService:SetMotor(gamepad, motor, 0)
+	end)
+end
+
+-- 揺れの強さ（1が最大）。decayTime 秒かけて0まで弱める。急に止まって見えないよう2乗で弱める
+local function decay(elapsed, decayTime)
+	if elapsed < 0 or elapsed >= decayTime then return 0 end
+	local remaining = 1 - elapsed / decayTime
+	return remaining * remaining
+end
+
+-- 叩いた人のカメラを揺らす。当たった瞬間に強く揺れ、引っかかりの間は弱く震え続け（押し込んでいる感じ）、
+-- 相手が飛ぶ瞬間にもう一度小さく揺れる
+local SHAKE_BINDING = "HitShake"
+local function shakeCamera(angle, catchDuration)
+	local shake = CombatConfig.HitFeedback.Shake
+	-- 引っかからない振り（溜めなし）は当たった瞬間に飛ぶので、揺れは1回だけ
+	local launchTime = if catchDuration > 0 then catchDuration * CombatConfig.HitFeedback.LaunchAt else nil
+	local endTime = math.max(catchDuration, (launchTime or 0) + shake.DecayTime)
+	local startedAt = os.clock()
+
+	RunService:UnbindFromRenderStep(SHAKE_BINDING) -- 前の揺れが残っていれば、新しい揺れに置き換える
+	-- 標準のカメラ処理（Camera の優先度）が毎フレームカメラを置き直した直後に傾けるので、傾きが積み重ならない
+	RunService:BindToRenderStep(SHAKE_BINDING, Enum.RenderPriority.Camera.Value + 1, function()
+		local elapsed = os.clock() - startedAt
+		if elapsed >= endTime then
+			RunService:UnbindFromRenderStep(SHAKE_BINDING)
+			return
+		end
+		local strength = decay(elapsed, shake.DecayTime)
+		if elapsed < catchDuration then
+			strength = math.max(strength, shake.TrembleRatio)
+		end
+		if launchTime then
+			strength += shake.LaunchPulseRatio * decay(elapsed - launchTime, shake.DecayTime)
+		end
+		-- 振り下ろしに合わせて主に上下に揺らす。横は周期をずらして少しだけ揺らし、単調な往復に見えないようにする
+		local phase = elapsed * shake.Frequency * 2 * math.pi
+		local pitch = angle * strength * math.sin(phase)
+		local yaw = angle * strength * shake.SideRatio * math.sin(phase * 1.3 + 1)
+		local camera = workspace.CurrentCamera
+		camera.CFrame *= CFrame.Angles(math.rad(pitch), math.rad(yaw), 0)
 	end)
 end
 
@@ -55,7 +103,7 @@ tool.Equipped:Connect(function()
 		local stage = character:GetAttribute("ChargeStage") or 0
 		if stage > previousStage then
 			local stageEffects = CombatConfig.ChargeEffects.Stages
-			vibrate(stageEffects[math.min(stage, #stageEffects)].Vibration)
+			vibrate(stageEffects[math.min(stage, #stageEffects)].Vibration, CombatConfig.ChargeEffects.VibrationDuration)
 		end
 		previousStage = stage
 	end)
@@ -104,8 +152,13 @@ local function predictHit(hitPart)
 	if not target or target == character or not target:FindFirstChildOfClass("Humanoid") then return end
 
 	hasPredictedHit = true
-	local duration = ChargeStages.getHitFeedback(swingStage).ImpactDuration
+	local feedback = ChargeStages.getHitFeedback(swingStage)
+	local duration = feedback.ImpactDuration
 	catchSwing(duration)
+	shakeCamera(feedback.ShakeAngle, duration)
+	-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す。
+	-- 引っかからない振りは、当たった瞬間の揺れと同じ長さだけ振動させる
+	vibrate(feedback.Vibration, if duration > 0 then duration else CombatConfig.HitFeedback.Shake.DecayTime)
 	-- サーバー側と同じく、押し込み中（相手が飛ぶまで）は次の溜めを始められない
 	local launchDelay = duration * CombatConfig.HitFeedback.LaunchAt
 	nextChargeAllowedAt = math.max(nextChargeAllowedAt, os.clock() + launchDelay + CombatConfig.Swing.Cooldown)
