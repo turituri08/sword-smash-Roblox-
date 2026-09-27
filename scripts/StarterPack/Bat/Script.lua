@@ -4,16 +4,19 @@
 --       将来的にここから ServerScriptService/SwordService へ移行する想定。
 -- 溜めた秒数はサーバーがここで測る（プレイヤー側から秒数を受け取らないことでチートを防ぐ）。
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local CombatConfig = require(ReplicatedStorage.Shared.CombatConfig)
 local ChargeStages = require(ReplicatedStorage.Shared.ChargeStages)
+local Knockback = require(ReplicatedStorage.Shared.Knockback)
 local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
+local distanceResultEvent = ReplicatedStorage.Remotes.DistanceResult
 
 -- 溜めの状態
 local chargingCharacter = nil -- 溜め中のキャラクター（溜めていなければnil）
@@ -72,6 +75,20 @@ local function stopCharge()
 	return stage
 end
 
+-- 飛距離を叩いたプレイヤーに知らせ、ベスト記録を更新する。
+-- ベストはプレイヤーの属性に持たせる（プレイヤー側へ自動で同期され、画面表示はこれを読む）。
+-- DataStoreに保存するようになったら PlayerData.recordDistance に置き換える
+local function reportDistance(attacker, distance, flightTime)
+	local player = Players:GetPlayerFromCharacter(attacker)
+	if not player then return end
+
+	local isNewBest = distance > (player:GetAttribute("BestDistance") or 0)
+	if isNewBest then
+		player:SetAttribute("BestDistance", distance)
+	end
+	distanceResultEvent:FireClient(player, distance, flightTime, isNewBest)
+end
+
 -- Hitboxに触れたパーツを判定し、Humanoidを持つキャラクターなら吹き飛ばす
 local function tryHit(hitPart)
 	if not canHit or hasHitThisSwing then return end
@@ -85,10 +102,14 @@ local function tryHit(hitPart)
 
 	hasHitThisSwing = true
 
-	local launch = CombatConfig.Launch
-	local direction = (targetRoot.Position - attacker.HumanoidRootPart.Position).Unit
-	local velocity = direction * launch.HorizontalSpeed + Vector3.new(0, launch.VerticalSpeed, 0)
-	CharacterLauncher.launch(target, velocity * swingMultiplier)
+	-- 向きは水平成分だけにする。相手との高さの差が混ざると、飛距離の計算値と実際の飛び方がずれる
+	local offset = targetRoot.Position - attacker.HumanoidRootPart.Position
+	local direction = Vector3.new(offset.X, 0, offset.Z)
+	direction = if direction.Magnitude > 0 then direction.Unit else attacker.HumanoidRootPart.CFrame.LookVector
+
+	local power, angle = Knockback.resolve(swingMultiplier)
+	CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle))
+	reportDistance(attacker, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
 end
 
 local function swing(stage)

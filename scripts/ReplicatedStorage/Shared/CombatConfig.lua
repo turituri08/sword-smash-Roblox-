@@ -13,12 +13,19 @@ CombatConfig.Swing = {
 	Cooldown = 0.4,       -- 当たり判定が終わってから、次に溜め始められるまでの秒数
 }
 
--- 吹っ飛ばし。溜めの倍率はこの速度全体にかかる
+-- 吹っ飛ばし。溜めの倍率は BasePower にかかる（飛距離は power の2乗に比例する）
 CombatConfig.Launch = {
-	HorizontalSpeed = 50,     -- 叩いた向きへの速さ
-	VerticalSpeed = 40,       -- 上向きの速さ
+	BasePower = 64,           -- 打ち出す速さ（stud/秒）。溜めなしで約20 stud飛ぶ
+	Angle = 38.7,             -- 打ち出す角度（度、水平が0）。45で最も遠くへ飛ぶ
+	MaxPower = 1000,          -- power の上限。大きくしておけば実質無効
 	LandingCheckDistance = 4, -- HumanoidRootPartの下、この距離以内に地面があれば着地直前とみなす
 	MaxAirTime = 10,          -- 奈落に落ちた場合などに備えた、着地待ちの上限秒数
+}
+
+-- 飛距離の表示（叩いたプレイヤーの画面にだけ出す）
+CombatConfig.DistanceDisplay = {
+	Unit = "m",           -- 1 stud を 1 として表示する
+	ResultHoldTime = 2.5, -- 数字が止まってから消えるまでの秒数
 }
 
 -- 溜め

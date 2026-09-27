@@ -110,15 +110,17 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 
 | ファイル            | Studio上の配置           | 種類         | 状態                                   |
 | ------------------- | ------------------------ | ------------ | -------------------------------------- |
-| `CombatConfig`      | ReplicatedStorage/Shared | ModuleScript | 作成済み（振り・吹っ飛ばし・溜めの値） |
+| `CombatConfig`      | ReplicatedStorage/Shared | ModuleScript | 作成済み（振り・吹っ飛ばし・溜め・飛距離表示の値） |
 | `ChargeStages`      | ReplicatedStorage/Shared | ModuleScript | 作成済み                               |
-| `Knockback`         | ReplicatedStorage/Shared | ModuleScript | 未作成                                 |
+| `Knockback`         | ReplicatedStorage/Shared | ModuleScript | 作成済み（スキル補正・蓄積ダメージは未対応） |
+| `DistanceResult`    | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いたプレイヤーへの通知のみ） |
 | `PowerLevel`        | ReplicatedStorage/Shared | ModuleScript | 未作成                                 |
 | `CharacterLauncher` | ServerScriptService      | ModuleScript | 作成済み                               |
 | `ChargeEffects`     | ServerScriptService      | ModuleScript | 作成済み                               |
 | `SwordService`      | ServerScriptService      | Script       | 未作成（当面は Bat の Script が担う）  |
 | `PlayerData`        | ServerScriptService      | ModuleScript | 未作成                                 |
 | `SwordClient`       | Tool の中                | LocalScript  | 未作成（当面は Bat の LocalScript が担う） |
+| `DistanceDisplay`   | StarterGui/DistanceHud   | LocalScript  | 作成済み（飛距離とベスト記録の表示）   |
 
 Rojo移行時のパス：`src/shared/`、`src/server/`、`src/client/`。
 
@@ -137,9 +139,10 @@ git管理用の写し（`scripts/`）は、**Studio上の場所をそのまま�
 
 ```
 scripts/
-  ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua
+  ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua
   ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua
   StarterPack/Bat/            Script.lua, LocalScript.lua
+  StarterGui/DistanceHud/     DistanceDisplay.lua
 ```
 
 ### Toolの構成
@@ -153,7 +156,7 @@ scripts/
 
 - `SwordService.getSkills` が固定値（QuickCharge Lv1）を返す仮実装のまま。`PlayerData.get(player)` → `PowerLevel.toSkillList(profile)` に差し替える
 - 剣IDもTool固定。`profile.equippedSword` から取るよう変更すると装備切り替えに対応できる
-- `PlayerData.recordDistance` がまだ `SwordService` から呼ばれていない
+- `PlayerData` が未作成のため、ベスト飛距離はプレイヤーの属性 `BestDistance` にセッション中だけ保持している（Bat の Script の `reportDistance`）。`PlayerData` を作ったら `PlayerData.recordDistance` に差し替える
 
 ### Studio上の注意
 
@@ -182,6 +185,16 @@ distance = power² × sin(2θ) / workspace.Gravity
 ```
 
 物理演算は見た目用、記録は計算値を使う。これによりフレームレートやネットワーク状況で結果がブレず、クライアントによる改ざんも成立しない。
+
+- `power = BasePower × 溜め倍率`、`θ = CombatConfig.Launch.Angle`。吹っ飛ばす速度も同じ2つから作る（水平 `power × cosθ`、上向き `power × sinθ`）
+- 叩く向きは水平成分だけにする。高さの差が混ざると計算値と飛び方がずれる
+- 現在の値（BasePower 64、角度38.7°）で、溜めなし20.4 stud、最大溜め（1.5倍）45.8 stud。実際の体は腰の高さから打ち出されて低い位置に着地するため、計算値より1 studほど遠くに落ちる
+
+### 飛距離の表示
+
+- サーバーが叩いた瞬間に飛距離と滞空時間（`2 × power × sinθ / Gravity`）を計算し、`Remotes.DistanceResult` で叩いたプレイヤーにだけ送る
+- 画面上部の中央（右上のベスト記録より少し上の高さ）に「0.0 m」を出し、滞空時間をかけて一定の速さで計算値まで増やす（水平の移動は時間に比例するため、飛んでいる体の位置と数字が合う）。止まった瞬間に数字を一瞬大きくし、ベスト更新なら「NEW RECORD!」を添える
+- 1 stud を 1 m として表示する。右上にベスト記録を常に表示する
 
 ### 溜めの扱い
 
@@ -308,8 +321,8 @@ distance = power² × sin(2θ) / workspace.Gravity
 
 ## 実装順序
 
-1. **叩いて飛ばす**（Tool・Hitbox・ダミーの設置、手触りの確認）← 現在ここ
-2. **飛距離の表示と記録**
+1. **叩いて飛ばす**（Tool・Hitbox・ダミーの設置、手触りの確認）
+2. **飛距離の表示と記録**（表示とセッション内のベスト記録まで実装済み。DataStoreへの保存は4と合わせて作る）← 現在ここ
 3. **溜め攻撃**（3段階の溜めを実装済み。手触りを調整中）
 4. **経験値とスキルの割り振り**（UI、サーバー側の検証、振り直し）
 5. **剣のレベルアップと解放**
