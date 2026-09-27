@@ -135,10 +135,11 @@ local function tryHit(hitPart)
 		end
 	end
 
+	local feedback = ChargeStages.getHitFeedback(swingStage)
 	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage))
 	local function launchTarget()
 		if not target.Parent then return end -- 押し込んでいる間に対象が消えた（リスポーンなど）
-		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle))
+		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle), feedback.Spins)
 		-- 飛距離の表示は吹き飛んでから始める（数字と小画面が実際の飛び出しと揃う）
 		reportDistance(attacker, target, direction, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
 	end
@@ -147,7 +148,6 @@ local function tryHit(hitPart)
 	-- 上体を後ろへ傾けてから吹き飛ばす。引っかかりが終わる少し手前、LaunchAt の割合の時点で飛ばす。
 	-- 叩いた人の振りは、プレイヤー側が自分で当たりを判定して同じ時間だけゆっくり再生する
 	-- （サーバーからの通知を待つと、通信の遅れのぶん減速が遅れるため）
-	local feedback = ChargeStages.getHitFeedback(swingStage)
 	if feedback.ImpactDuration <= 0 then
 		launchTarget()
 		return

@@ -34,11 +34,12 @@ CombatConfig.HitFeedback = {
 		-- Vibration: 当たってから引っかかりが終わるまでの、コントローラーの振動の強さ（0〜1）
 		-- FlashSize / RingSize: 当たった場所の閃光・衝撃波の輪が広がり切ったときの大きさ（stud）
 		-- SparkCount: 当たった場所から飛び散る火花の数
+		-- Spins: 飛ばされた相手（ラグドール）が、滞空中に後ろへ回る回数
 		-- 溜めなし（0）の当たりには揺れ・振動・当たった場所の演出を出さないので、その値は持たない
-		[0] = { ImpactDuration = 0, PushDistance = 0 },
-		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, FlashSize = 4, RingSize = 6, SparkCount = 14 },
-		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, FlashSize = 5, RingSize = 8, SparkCount = 22 },
-		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, FlashSize = 7, RingSize = 11, SparkCount = 35 },
+		[0] = { ImpactDuration = 0, PushDistance = 0, Spins = 0.5 },
+		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, FlashSize = 4, RingSize = 6, SparkCount = 14, Spins = 0.75 },
+		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, FlashSize = 5, RingSize = 8, SparkCount = 22, Spins = 1 },
+		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, FlashSize = 7, RingSize = 11, SparkCount = 35, Spins = 1.5 },
 	},
 	PushTilt = 15, -- 押し込む間に相手の上体を後ろへ傾ける角度（度）
 	-- 引っかかりの時間のうち、この割合の時点で相手を飛ばす（振り抜き始める少し手前）。
@@ -74,6 +75,24 @@ CombatConfig.Launch = {
 	MaxPower = 1000,          -- power の上限。大きくしておけば実質無効
 	LandingCheckDistance = 4, -- HumanoidRootPartの下、この距離以内に地面があれば着地直前とみなす
 	MaxAirTime = 10,          -- 奈落に落ちた場合などに備えた、着地待ちの上限秒数
+}
+
+-- 吹き飛ばされる側のラグドール（関節がぶらぶらの人形になる）
+CombatConfig.Ragdoll = {
+	-- 関節ごとの可動域（度）。UpperAngle: 立ち姿勢から振れる角度、TwistLowerAngle〜TwistUpperAngle: 手足の軸まわりのねじれ
+	Joints = {
+		Neck = { UpperAngle = 30, TwistLowerAngle = -45, TwistUpperAngle = 45 },
+		["Left Shoulder"] = { UpperAngle = 110, TwistLowerAngle = -70, TwistUpperAngle = 70 },
+		["Right Shoulder"] = { UpperAngle = 110, TwistLowerAngle = -70, TwistUpperAngle = 70 },
+		["Left Hip"] = { UpperAngle = 70, TwistLowerAngle = -30, TwistUpperAngle = 30 },
+		["Right Hip"] = { UpperAngle = 70, TwistLowerAngle = -30, TwistUpperAngle = 30 },
+	},
+	-- 上にない関節（プレイヤーの R15 アバターの肘・膝など）
+	DefaultJoint = { UpperAngle = 45, TwistLowerAngle = -30, TwistUpperAngle = 30 },
+	MaxTwistSpeed = 3, -- 回転に加える、ランダムなひねりの最大の速さ（ラジアン/秒）
+	Friction = 1.5,    -- ラグドールの間の体の摩擦（素材のプラスチックは0.3）。小さいと着地後に長く滑る
+	LieTime = 0.5,     -- 着地してから倒れたままでいる秒数
+	GetUpTime = 0.3,   -- 起き上がりにかける秒数
 }
 
 -- 飛距離の表示（叩いたプレイヤーの画面にだけ出す）

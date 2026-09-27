@@ -1,9 +1,10 @@
 -- Studio配置: ServerScriptService > CharacterLauncher（ModuleScript）
--- 役割: キャラクターを指定の速度で吹き飛ばし、着地したら立たせ直す。
+-- 役割: キャラクターを指定の速度で吹き飛ばしてラグドールにし、着地して少し倒れた後に起き上がらせる。
 --       どの速度で飛ばすかは呼び出し側が決める。
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CombatConfig = require(ReplicatedStorage.Shared.CombatConfig)
+local Ragdoll = require(script.Parent.Ragdoll)
 
 local CharacterLauncher = {}
 
@@ -24,7 +25,18 @@ local function waitUntilLanding(character, rootPart)
 	end
 end
 
-function CharacterLauncher.launch(character, velocity)
+-- 後ろ宙返りの向きの回転と、少しだけランダムなひねり。滞空中に spins 回転する速さにする
+local function getSpin(velocity, spins)
+	local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+	if horizontal.Magnitude < 0.01 or velocity.Y <= 0 then return Vector3.zero end
+	-- この軸で回すと頭が飛ぶ向きへ倒れる（押し込みでのけぞった向きのまま回り続ける）
+	local flipAxis = Vector3.yAxis:Cross(horizontal.Unit)
+	local flightTime = 2 * velocity.Y / workspace.Gravity
+	local twist = (math.random() * 2 - 1) * CombatConfig.Ragdoll.MaxTwistSpeed
+	return flipAxis * (spins * 2 * math.pi / flightTime) + Vector3.yAxis * twist
+end
+
+function CharacterLauncher.launch(character, velocity, spins)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not humanoid or not rootPart then return end
@@ -32,12 +44,28 @@ function CharacterLauncher.launch(character, velocity)
 	-- Humanoidは標準でバランスを取ろうとして外部から与えた速度を打ち消すため、
 	-- PlatformStandで一時的に自動制御を切ってから速度を与える
 	humanoid.PlatformStand = true
-	rootPart.AssemblyLinearVelocity = velocity
+	Ragdoll.enable(character)
+	-- 関節を切ると部位ごとに別々の塊になるので、速度と回転は全部の部位に与える。
+	-- 体全体が1つの塊として回るよう、胴体の中心からの位置に応じて、回転による速度も足す
+	-- （足さないと、部位同士が関節で引っ張り合って回転が打ち消される）
+	local angularVelocity = getSpin(velocity, spins)
+	local center = rootPart.Position
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.AssemblyLinearVelocity = velocity + angularVelocity:Cross(part.Position - center)
+			part.AssemblyAngularVelocity = angularVelocity
+		end
+	end
 
-	-- PlatformStand中は体を浮かせる支えの力も止まり、着地すると脚が地面に沈む。
-	-- 着地の直前に制御を戻して、Humanoidに立たせ直させる
+	-- 叩かれるたびに数を増やし、前の吹き飛ばしの起き上がりが、新しい吹き飛ばしの途中で動かないようにする
+	local launchCount = (character:GetAttribute("LaunchCount") or 0) + 1
+	character:SetAttribute("LaunchCount", launchCount)
+
 	task.spawn(function()
 		waitUntilLanding(character, rootPart)
+		task.wait(CombatConfig.Ragdoll.LieTime)
+		if not character.Parent or character:GetAttribute("LaunchCount") ~= launchCount then return end
+		Ragdoll.disable(character)
 		humanoid.PlatformStand = false
 	end)
 end

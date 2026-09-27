@@ -119,6 +119,7 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `PowerLevel`        | ReplicatedStorage/Shared | ModuleScript | 未作成                                 |
 | `CharacterLauncher` | ServerScriptService      | ModuleScript | 作成済み                               |
 | `ChargeEffects`     | ServerScriptService      | ModuleScript | 作成済み                               |
+| `Ragdoll`           | ServerScriptService      | ModuleScript | 作成済み（飛ばされた相手をラグドールにし、起き上がらせる） |
 | `SwordService`      | ServerScriptService      | Script       | 未作成（当面は Bat の Script が担う）  |
 | `PlayerData`        | ServerScriptService      | ModuleScript | 未作成                                 |
 | `SwordClient`       | Tool の中                | LocalScript  | 未作成（当面は Bat の LocalScript が担う） |
@@ -144,7 +145,7 @@ git管理用の写し（`scripts/`）は、**Studio上の場所をそのまま�
 ```
 scripts/
   ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua, HitEffects.lua
-  ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua
+  ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua, Ragdoll.lua
   StarterPack/Bat/            Script.lua, LocalScript.lua
   StarterGui/DistanceHud/     DistanceDisplay.lua, TargetCamera.lua
   StarterPlayer/StarterPlayerScripts/   HitEffectReceiver.lua
@@ -230,6 +231,19 @@ distance = power² × sin(2θ) / workspace.Gravity
   - 衝撃波の輪は相手が飛ぶ向きに垂直な面で広がり、火花は相手が飛ぶ向き（打ち出す角度で斜め上）へ円錐状に飛び散る
   - 叩いた本人は当たりの予測からその場で出し（カメラの揺れと重なる）、他のプレイヤーにはサーバーが当たりを決めた時点で `Remotes.HitEffect` で知らせて各自の画面で出す。対戦で「誰がどれだけの強さで叩いたか」が分かり、強化を見せる楽しさにもなる。サーバーは自分で決めた当たりでしか知らせないので、ずるをして他人の画面に演出を出させることはできない
   - 演出はプレイヤー側で粒（ParticleEmitter）として作る。サーバーで部品の大きさを変えると、他のプレイヤーには通信の間隔でカクカク見えるため
+
+### 吹き飛ばされる側の動き（ラグドール）
+
+- 飛ばす瞬間に、溜めの段階に関係なくラグドール（関節がぶらぶらの人形）にする（`Ragdoll.enable`）。胴体以外の関節（Motor6D）を止め、同じ位置を可動域つきの関節（BallSocketConstraint）でつなぐ。可動域は関節の名前ごとに `CombatConfig.Ragdoll.Joints`、名前のない関節（R15 の肘・膝など）は `DefaultJoint`
+- 回転：後ろ宙返りの向き（押し込みでのけぞった向きのまま回り続ける）に、少しだけランダムなひねり（`MaxTwistSpeed`）を加える。回る量は段階ごとの `HitFeedback.Stages[].Spins`（滞空中の回転数）で、溜めた一撃ほど多く回る。手足が揺れるぶん回転が少し逃げ、実際は設定の8割ほど回る
+- 着地して `LieTime`（0.5秒）倒れたままでいてから、`GetUpTime`（0.3秒）かけて起き上がる（`Ragdoll.disable`）。関節を「今の崩れた角度」から元の角度へ、体を「倒れた向き」から「立った向き」へ、同時になめらかに戻す（そのまま戻すと手足と体が1フレームで立ち姿勢へ飛ぶ）。より自然にするなら、起き上がりのアニメーションを作る（着地の作り込みのときに検討）
+- 実装上の注意
+  - 首の関節を止めると Humanoid は首が取れたとみなして倒してしまうため、ラグドールの間だけ `RequiresNeck` を切る
+  - R6 の腕と脚は普段地面とぶつからないため、ラグドールの間だけぶつかるようにする（そのままだと地面にめり込む）
+  - 関節を切った体は Humanoid の踏ん張りが効かず、着地後に氷の上のように滑る（素材の摩擦0.3で約26 stud）。ラグドールの間だけ体の摩擦を `Friction`（1.5）に上げる
+  - 関節を切ると部位ごとに別々の塊になるため、速度と回転は全部の部位に与える。体全体が1つの塊として回るよう、胴体の中心からの位置に応じた回転による速度も足す（足さないと部位同士が引っ張り合い、回転が打ち消される）
+  - 倒れている間にもう一度叩かれた場合に備え、叩かれた回数（`LaunchCount` 属性）を数え、前の吹き飛ばしの起き上がりが新しい吹き飛ばしの途中で動かないようにしている
+  - 起き上がりはサーバーで動かすので、公開環境では押し込みと同じく少しカクついて見える可能性がある
 
 ### 溜めの扱い
 
@@ -342,6 +356,8 @@ distance = power² × sin(2θ) / workspace.Gravity
 
 ### 継続的な懸念
 
+**プレイヤーを飛ばす仕組み** プレイヤーのキャラクターは動きの計算をそのプレイヤーの端末が担当しているため、サーバーから速度を与えたりラグドールにしたりしても反映されないことがある。今の吹き飛ばしとラグドールは、サーバーが動かす CPU（Noob）だけを前提にしている。対戦モードを作るときに、プレイヤーを飛ばす仕組み（計算の担当をサーバーに移す、または叩かれた本人の端末で飛ばす）とまとめて対応する。
+
 **対戦の格差** 強化を持ち込む方針のため、負け続ける側の離脱が最大のリスク。ティア分け、短いラウンド、敗者への無料救済で対処する。腕前（位置取り・溜めのタイミング）で多少覆せる余地は必ず残す。
 
 **マッチング人口** ティアを細かく分けるとマッチしなくなる。初期は1ティアで運用し、待ち時間が十分短くなってから分割する。待機人数に応じて自動で統合・分割する仕組みがあると運用が楽。
@@ -353,6 +369,14 @@ distance = power² × sin(2θ) / workspace.Gravity
 **有料ランダムの線引き** 将来ガチャを入れる場合は、全結果と確率の開示、`PolicyService` による地域別の出し分けが必須になる。無料通貨のみで回る抽選は対象外。ここを跨ぐときは実装コストを見積もり直すこと。
 
 **公開時の確認事項** 年齢区分に関する質問票への回答が必要。収益化やDeveloper Exchange（現金化）には年齢・金額などの条件があり変更されうるため、公開時にCreator Hubで最新を確認する。
+
+### 今後のアイデア
+
+**会心の一撃** まだ仕様としては決めていない。候補：
+- バットの先端・中間・根元のどこに当たったかで吹っ飛び率を変える（スマブラのバットのように先端ほど飛ぶ）。当たった場所は `HitEffects.getContactPoint` で求めているので、持ち手からの距離で3つに分けられる。倍率は `Knockback.resolve()` に足す
+- 叩くと会心ゲージが溜まり、特定のボタンで会心の一撃を放つ（溜めとは別の入力）
+- 会心のときは吹っ飛び方を派手にする（激しい回転、頭から地面に刺さる、空の彼方で星になる など）
+- 「先端の判定を広げる」「ゲージが溜まりやすくなる」はスキルの候補にもなる
 
 ## 実装順序
 
