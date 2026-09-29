@@ -21,10 +21,19 @@ function ChargeStages.getMultiplier(stage)
 	return CombatConfig.Charge.Stages[stage].Multiplier
 end
 
--- 段階に対応する、当たった瞬間の手応えの値（CombatConfig.HitFeedback.Stages の1行）
-function ChargeStages.getHitFeedback(stage)
+-- 段階に対応する、当たった瞬間の手応えの値（CombatConfig.HitFeedback.Stages の1行）。
+-- タイミングゲージの結果（gaugeResult）があれば、その結果の値（TimingGauge.HitFeedback）で一部を差し替える
+function ChargeStages.getHitFeedback(stage, gaugeResult)
 	local stages = CombatConfig.HitFeedback.Stages
-	return stages[math.min(stage, #stages)]
+	local feedback = stages[math.min(stage, #stages)]
+	local override = gaugeResult and CombatConfig.TimingGauge.HitFeedback[gaugeResult]
+	if not override then return feedback end
+	-- 設定の表を書き換えないよう、写しに差し替える
+	local merged = table.clone(feedback)
+	for key, value in pairs(override) do
+		merged[key] = value
+	end
+	return merged
 end
 
 -- 段階に対応する振りの再生速度。溜めた振りは当たるまで遅く振り下ろして重さを出す

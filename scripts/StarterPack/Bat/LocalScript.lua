@@ -1,10 +1,12 @@
 -- Studio配置: StarterPack > Bat (Tool) > LocalScript（プレイヤー側で実行される）
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
+--       溜め切った後のタイミングゲージを出し、離したら経過秒数を付けてサーバーへ知らせる（Remotes.ChargeRelease）。
 --       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の星・衝撃波・火花、相手の震えもここで出す。
 --       ボタンへの反応を遅らせないよう、サーバーを経由せずここで再生する
 --       （自分のキャラクターのアニメーションは、プレイヤー側で再生しても他のプレイヤーに同期される）。
 --       溜めの秒数や段階、当たり・吹き飛ばしの判定はサーバー側のScriptが行い、ここでは見た目と手触りだけを扱う。
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HapticService = game:GetService("HapticService")
 local RunService = game:GetService("RunService")
@@ -15,9 +17,12 @@ local ChargeStages = require(Shared:WaitForChild("ChargeStages"))
 local Knockback = require(Shared:WaitForChild("Knockback"))
 local HitEffects = require(Shared:WaitForChild("HitEffects"))
 local TargetShake = require(Shared:WaitForChild("TargetShake"))
+local TimingGauge = require(Shared:WaitForChild("TimingGauge"))
+local TimingGaugeDisplay = require(Shared:WaitForChild("TimingGaugeDisplay"))
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
+local chargeReleaseEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ChargeRelease")
 
 local slashAnimation = Instance.new("Animation")
 slashAnimation.AnimationId = CombatConfig.Swing.AnimationId
@@ -33,6 +38,42 @@ local stageConnection = nil
 -- 当たり判定の出ない空振りアニメーションが再生されないようにする
 local isCharging = false
 local nextChargeAllowedAt = 0
+
+-- タイミングゲージ。押した時刻からプレイヤー側で計る（サーバーから段階の知らせを待つと、通信の遅れのぶんゲージが遅れる）
+local chargeStartedAt = 0
+local gaugeBillboard = nil
+local gaugeConnection = nil
+
+-- ゲージが出てからの秒数。まだ出ていない（最大段階に届いていない）ならnil
+local function getGaugeElapsed()
+	local elapsed = os.clock() - chargeStartedAt - TimingGauge.getStartTime()
+	return if elapsed >= 0 then elapsed else nil
+end
+
+-- 溜めている間、毎フレームゲージを動かす。最大段階に届いた時点でゲージを出す
+local function startGauge()
+	gaugeConnection = RunService.RenderStepped:Connect(function()
+		local elapsed = getGaugeElapsed()
+		if not elapsed then return end
+		if not gaugeBillboard then
+			local rootPart = tool.Parent:FindFirstChild("HumanoidRootPart")
+			if not rootPart then return end
+			gaugeBillboard = TimingGaugeDisplay.create(rootPart, Players.LocalPlayer.PlayerGui)
+		end
+		TimingGaugeDisplay.setPosition(gaugeBillboard, TimingGauge.getPosition(elapsed))
+	end)
+end
+
+local function stopGauge()
+	if gaugeConnection then
+		gaugeConnection:Disconnect()
+		gaugeConnection = nil
+	end
+	if gaugeBillboard then
+		gaugeBillboard:Destroy()
+		gaugeBillboard = nil
+	end
+end
 
 -- 振動を止める予約が、後から始めた振動まで止めないように、何回目の振動かを数える
 local vibrationCount = 0
@@ -111,6 +152,7 @@ end)
 
 tool.Unequipped:Connect(function()
 	isCharging = false
+	stopGauge()
 	if chargeTrack then
 		chargeTrack:Stop()
 	end
@@ -123,6 +165,8 @@ end)
 tool.Activated:Connect(function()
 	if os.clock() < nextChargeAllowedAt then return end
 	isCharging = true
+	chargeStartedAt = os.clock()
+	startGauge()
 	if chargeTrack then
 		chargeTrack:Play(CombatConfig.Charge.AnimationFadeTime)
 	end
@@ -130,6 +174,7 @@ end)
 
 -- 振ってから当たり判定が終わるまでの状態（サーバー側の当たり判定と同じ時間だけ有効）
 local swingStage = 0
+local swingGaugeResult = nil -- 自分で判定したタイミングゲージの結果（ゲージが出る前に離したならnil）
 local canPredictHit = false
 local hasPredictedHit = false
 
@@ -154,15 +199,15 @@ local function predictHit(hitPart)
 	if not targetRoot then return end
 
 	hasPredictedHit = true
-	local feedback = ChargeStages.getHitFeedback(swingStage)
+	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult)
 	local duration = feedback.ImpactDuration
 	catchSwing(duration)
 	-- 溜めなしの軽い当たりには、揺れ・振動・当たった場所の演出を出さない（溜めた一撃との差を出す）
 	if swingStage > 0 then
 		shakeCamera(feedback.ShakeAngle, duration)
 		local direction = Knockback.getDirection(character.HumanoidRootPart, targetRoot)
-		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage)
-		TargetShake.play(target, direction, swingStage)
+		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage, swingGaugeResult)
+		TargetShake.play(target, direction, swingStage, swingGaugeResult)
 		-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す
 		vibrate(feedback.Vibration, duration)
 	end
@@ -174,10 +219,18 @@ end
 hitbox.Touched:Connect(predictHit)
 
 tool.Deactivated:Connect(function()
+	-- サーバーに振らせる。ゲージが出ていれば、離した瞬間の経過秒数を付ける（サーバーは溜めていなければ無視する）
+	local gaugeElapsed = if isCharging then getGaugeElapsed() else nil
+	chargeReleaseEvent:FireServer(gaugeElapsed)
+	stopGauge()
+
 	if not isCharging or not slashTrack then return end
 	isCharging = false
 	-- 段階はサーバーが書く属性から読む（離した直後はまだ離した時点の段階が入っている）
 	swingStage = tool.Parent:GetAttribute("ChargeStage") or 0
+	-- 当たりの演出に使う結果。サーバーも同じ秒数で判定するので、ふつうは同じ結果になる
+	-- （通信がとても遅いと、サーバーが秒数を補正して結果が変わり、見た目だけずれることがある）
+	swingGaugeResult = if swingStage == ChargeStages.getMaxStage() and gaugeElapsed then TimingGauge.getResult(gaugeElapsed) else nil
 	local hitStart, hitEnd = ChargeStages.getHitWindow(swingStage)
 	nextChargeAllowedAt = os.clock() + hitEnd + CombatConfig.Swing.Cooldown
 

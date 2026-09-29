@@ -8,10 +8,11 @@ local CombatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 
 local Knockback = {}
 
--- 打撃の強さと角度を決める。スキル補正や蓄積ダメージは今後ここに足していく
-function Knockback.resolve(chargeMultiplier)
+-- 打撃の強さと角度を決める。timingMultiplier はタイミングゲージの倍率（TimingGauge.getMultiplier）。
+-- スキル補正や蓄積ダメージは今後ここに足していく
+function Knockback.resolve(chargeMultiplier, timingMultiplier)
 	local launch = CombatConfig.Launch
-	local power = math.min(launch.BasePower * chargeMultiplier, launch.MaxPower)
+	local power = math.min(launch.BasePower * chargeMultiplier * timingMultiplier, launch.MaxPower)
 	return power, launch.Angle
 end
 

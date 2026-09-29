@@ -1,5 +1,5 @@
 -- Studio配置: ReplicatedStorage > Shared > HitEffects（ModuleScript）
--- 役割: 当たった場所に、相手から弾けるトゲの星・衝撃波の輪・火花を、溜めの段階色で出す。どれも光る部品で作り、はっきりした形に見せる。
+-- 役割: 当たった場所に、相手から弾けるトゲの星・衝撃波の輪・火花を、溜めの段階色（タイミングゲージが緑・赤ならその色）で出す。どれも光る部品で作り、はっきりした形に見せる。
 --       演出はプレイヤー側で作り、毎フレーム動かす（サーバーで動かすと、他のプレイヤーには通信の間隔でカクついて見える）。
 --       叩いた本人は自分の当たりの予測から、他のプレイヤーはサーバーからの知らせ（Remotes.HitEffect）を受けて呼ぶ。
 --       当たった場所の計算はサーバーも使うので、ここに置く
@@ -233,10 +233,11 @@ local function playSparks(position, direction, count, color)
 	end)
 end
 
--- stage は1以上（溜めなしの当たりには演出を出さないので、呼ぶ側で除く）
-function HitEffects.play(position, direction, stage)
-	local feedback = ChargeStages.getHitFeedback(stage)
-	local color = getColor(stage)
+-- stage は1以上（溜めなしの当たりには演出を出さないので、呼ぶ側で除く）。
+-- gaugeResult はタイミングゲージの結果（ゲージが出る前に離したなら nil）。緑・赤なら大きさと色が変わる
+function HitEffects.play(position, direction, stage, gaugeResult)
+	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult)
+	local color = feedback.Color or getColor(stage)
 
 	-- 相手が飛ぶ向き（打ち出す角度で斜め上）。衝撃波の輪の面の向きと、火花の飛ぶ向きに使う
 	local launchAngle = math.rad(CombatConfig.Launch.Angle)
@@ -249,11 +250,15 @@ function HitEffects.play(position, direction, stage)
 		playBurst(launchPosition, feedback.BurstSize * CombatConfig.HitFeedback.Burst.LaunchRatio, color)
 	end)
 
-	-- 衝撃波の輪: 当たった瞬間に星と同時に出し、星より外まで広げる
-	playShockwave(position, launchDirection, feedback.ShockwaveSize, color)
+	-- 衝撃波の輪: 当たった瞬間に星と同時に出し、星より外まで広げる（ミスのときは出さない）
+	if feedback.ShockwaveSize > 0 then
+		playShockwave(position, launchDirection, feedback.ShockwaveSize, color)
+	end
 
-	-- 火花: 相手が飛ぶ向きへ円錐状に飛び散り、落ちながら消える
-	playSparks(position, launchDirection, feedback.SparkCount, color)
+	-- 火花: 相手が飛ぶ向きへ円錐状に飛び散り、落ちながら消える（ミスのときは出さない）
+	if feedback.SparkCount > 0 then
+		playSparks(position, launchDirection, feedback.SparkCount, color)
+	end
 end
 
 return HitEffects

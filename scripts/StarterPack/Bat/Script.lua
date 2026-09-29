@@ -3,6 +3,9 @@
 --       溜め中などのプレイヤーごとの状態を持つ。仕様書の SwordService に相当する処理が
 --       将来的にここから ServerScriptService/SwordService へ移行する想定。
 -- 溜めた秒数はサーバーがここで測る（プレイヤー側から秒数を受け取らないことでチートを防ぐ）。
+-- ただし溜め切った後のタイミングゲージだけは、画面の見た目と判定を揃えるため、プレイヤー側で計った秒数を
+-- 上限付きで信用する（TimingGauge.resolveElapsed）。そのため離した合図は tool.Deactivated ではなく、
+-- 秒数を付けられる Remotes.ChargeRelease で受け取る
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,6 +17,7 @@ local CombatConfig = require(ReplicatedStorage.Shared.CombatConfig)
 local ChargeStages = require(ReplicatedStorage.Shared.ChargeStages)
 local Knockback = require(ReplicatedStorage.Shared.Knockback)
 local HitEffects = require(ReplicatedStorage.Shared.HitEffects)
+local TimingGauge = require(ReplicatedStorage.Shared.TimingGauge)
 local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
 
@@ -21,6 +25,7 @@ local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
 local distanceResultEvent = ReplicatedStorage.Remotes.DistanceResult
 local hitEffectEvent = ReplicatedStorage.Remotes.HitEffect
+local chargeReleaseEvent = ReplicatedStorage.Remotes.ChargeRelease
 
 -- サーバーは、振っているプレイヤーから届いたアニメーションで Hitbox の位置を計算する。
 -- アニメーションを初めて再生するときは読み込みが終わるまでバットが動かず、最初の一振りだけ当たり判定が遅れるため、
@@ -46,6 +51,7 @@ local isSwinging = false      -- 振ってからクールダウンが終わる�
 local canHit = false          -- 当たり判定が有効な間だけtrue
 local hasHitThisSwing = false -- 1回の振りにつき1体だけ吹き飛ばす
 local swingStage = 0          -- 今の振りの溜め段階
+local swingGaugeResult = nil  -- 今の振りのタイミングゲージの結果（ゲージが出る前に離したならnil）
 local pushEndTime = 0         -- 押し込みが終わって相手が飛ぶ時刻。クールダウンはこれより後から数える
 
 -- 段階はキャラクターの属性にも書いておき、プレイヤー側（コントローラーの振動）から読めるようにする
@@ -77,20 +83,21 @@ local function startCharge(character)
 	end)
 end
 
--- 溜めを終えて演出と歩く速さを元に戻し、離した時点の段階を返す
+-- 溜めを終えて演出と歩く速さを元に戻し、離した時点の段階と、溜め始めてからの秒数を返す
 local function stopCharge()
 	local character = chargingCharacter
 	chargingCharacter = nil -- 段階を上げるループもこれで止まる
 
 	-- ループの更新を待たず、離した瞬間の秒数で段階を確定させる
-	local stage = ChargeStages.getStage(os.clock() - chargeStartTime)
+	local elapsed = os.clock() - chargeStartTime
+	local stage = ChargeStages.getStage(elapsed)
 
 	setChargeStage(character, 0)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = originalWalkSpeed
 	end
-	return stage
+	return stage, elapsed
 end
 
 -- 飛距離を叩いたプレイヤーに知らせ、ベスト記録を更新する。
@@ -130,13 +137,13 @@ local function tryHit(hitPart)
 		local attackerPlayer = Players:GetPlayerFromCharacter(attacker)
 		for _, player in ipairs(Players:GetPlayers()) do
 			if player ~= attackerPlayer then
-				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target)
+				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target, swingGaugeResult)
 			end
 		end
 	end
 
-	local feedback = ChargeStages.getHitFeedback(swingStage)
-	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage))
+	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult)
+	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage), TimingGauge.getMultiplier(swingGaugeResult))
 	local function launchTarget()
 		if not target.Parent then return end -- 押し込んでいる間に対象が消えた（リスポーンなど）
 		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle), feedback.Spins, feedback.DownTime)
@@ -172,9 +179,10 @@ local function tryHit(hitPart)
 	end)
 end
 
-local function swing(stage)
+local function swing(stage, gaugeResult)
 	isSwinging = true
 	swingStage = stage
+	swingGaugeResult = gaugeResult
 	hasHitThisSwing = false
 	pushEndTime = 0
 
@@ -205,10 +213,19 @@ tool.Activated:Connect(function()
 	startCharge(tool.Parent)
 end)
 
--- R2を離した瞬間：溜めた段階で振る
-tool.Deactivated:Connect(function()
-	if not chargingCharacter then return end
-	swing(stopCharge())
+-- R2を離した瞬間：溜めた段階で振る。clientGaugeElapsed はプレイヤー側で計った、ゲージが出てからの秒数
+-- （ゲージが出る前に離したならnil）。他のプレイヤーのバットへの合図も届くので、持ち主からの合図だけを受ける
+chargeReleaseEvent.OnServerEvent:Connect(function(player, clientGaugeElapsed)
+	if not chargingCharacter or Players:GetPlayerFromCharacter(tool.Parent) ~= player then return end
+	local stage, elapsed = stopCharge()
+
+	-- 最大段階まで溜めていたら、ゲージの結果を判定する。サーバーで計った秒数を基準に、プレイヤー側の秒数を範囲内で信用する
+	local gaugeResult = nil
+	if stage == ChargeStages.getMaxStage() then
+		local serverGaugeElapsed = elapsed - TimingGauge.getStartTime()
+		gaugeResult = TimingGauge.getResult(TimingGauge.resolveElapsed(clientGaugeElapsed, serverGaugeElapsed))
+	end
+	swing(stage, gaugeResult)
 end)
 
 -- 溜め中にバットをしまったら、振らずに溜めを取り消す

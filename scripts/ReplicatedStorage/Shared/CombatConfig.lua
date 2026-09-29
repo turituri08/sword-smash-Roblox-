@@ -160,6 +160,49 @@ CombatConfig.Charge = {
 	AnimationFadeTime = 0.2, -- 構えの姿勢へ移るまでの秒数（なめらかに振りかぶる）
 }
 
+-- 溜め切った後のタイミングゲージ。最大段階に達すると、キャラクターの横に上下へ往復するゲージが出る（叩く本人にだけ見える）。
+-- 上の端（緑）で離すと極大、下の端（赤）で離すとミス、その間は普通の吹っ飛ばし。時間切れはない
+local GAUGE_GREEN = Color3.fromRGB(60, 255, 110)
+local GAUGE_MISS = Color3.fromRGB(255, 50, 50)
+CombatConfig.TimingGauge = {
+	TravelTime = 0.6,    -- 下の端から上の端まで動く秒数（往復はこの2倍）。一定の速さで動く
+	-- ゲージが出た瞬間の位置（0が下の端、1が上の端）。赤の少し上から上向きに動き始め、溜め切ってすぐ離しても赤にならないようにする
+	StartPosition = 0.2,
+	GreenZone = 0.1,     -- 上の端から、この割合までが緑。上の端で折り返すので、緑にいる時間は1往復で 2 × GreenZone × TravelTime 秒。スキルで広げる想定
+	MissZone = 0.15,     -- 下の端から、この割合までが赤
+	-- 吹っ飛ばしの倍率。最大溜めの倍率（Charge.Stages の最後の Multiplier）に掛ける。緑の倍率はスキルで増やす想定
+	Multipliers = { Green = 1.2, Normal = 1, Miss = 0.7 },
+	-- 離した合図には、プレイヤー側で計ったゲージの経過秒数を付けて送る。その値は通信の片道ぶんサーバーの値より小さくなるので、
+	-- サーバーの値からこの秒数小さい値までは信用する。それより外れた値は、この範囲に収めてから判定する（ずらせるのはこの幅だけ）
+	MaxLatency = 0.3,
+	-- 当たったときの手応えのうち、結果によって差し替える値（HitFeedback.Stages の最大段階の行を上書きする）。
+	-- Color は星・衝撃波の輪・火花の色（段階色の代わり）。普通のときは差し替えない
+	HitFeedback = {
+		Green = { Color = GAUGE_GREEN, ShakeAngle = 2.4, BurstSize = 7, ShockwaveSize = 8.5, SparkCount = 28, TargetShake = 0.6, Spins = 2 },
+		-- ミスは手応えを抜く: 小さな赤い星だけ出し、衝撃波の輪・火花・カメラの揺れは出さず、振動と引っかかりも弱くする
+		Miss = { Color = GAUGE_MISS, ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0, Vibration = 0.3, BurstSize = 2, ShockwaveSize = 0, SparkCount = 0, TargetShake = 0.15, Spins = 0.5, DownTime = 0.5 },
+	},
+	-- ゲージの見た目。キャラクターの画面上の右横に、外側へふくらむ三日月形の弧（NBA 2K のシュートメーター風）として出す。
+	-- 下の端から今の位置までを塗りつぶし、塗りの先が緑・赤の帯に入ると塗り全体がその色になる。
+	-- 長さ・太さは、ゲージを収める正方形の一辺（Size）に対する割合
+	Display = {
+		Size = 3.5,          -- ゲージを収める正方形の一辺（stud）
+		Offset = Vector3.new(2.5, 0.5, 0), -- HumanoidRootPart から、画面の右・上へずらす量（stud）
+		ArcAngle = 110,      -- 弧の開き（度）。大きいほど丸く曲がる
+		Radius = 0.42,       -- 弧の半径
+		SegmentCount = 40,   -- 弧を作る部品の数（多いほどなめらか）
+		MaxThickness = 0.1,  -- 真ん中の太さ
+		MinThickness = 0.025, -- 両端の太さ（両端を細くして三日月形にする）
+		OutlineThickness = 0.02, -- 黒い縁の太さ
+		OutlineColor = Color3.fromRGB(0, 0, 0),
+		-- 塗られていないところの色。緑・赤の帯は暗い色で見せておき、どこを狙えばよいか分かるようにする。
+		-- 部品どうしが少し重なっているので、半透明にすると重なりが縞に見える。暗さは透明度ではなく色で出す
+		EmptyColors = { Green = Color3.fromRGB(25, 110, 50), Normal = Color3.fromRGB(40, 40, 40), Miss = Color3.fromRGB(120, 25, 25) },
+		-- 塗りの色。塗りの先がある帯で決まる
+		FillColors = { Green = GAUGE_GREEN, Normal = Color3.fromRGB(255, 255, 255), Miss = GAUGE_MISS },
+	},
+}
+
 -- 溜めの演出。Stages の各行は Charge.Stages の同じ段階に対応する
 CombatConfig.ChargeEffects = {
 	Stages = {
