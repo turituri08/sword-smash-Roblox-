@@ -11,7 +11,7 @@ local Ragdoll = {}
 
 local SOCKET_NAME = "RagdollSocket"
 local ATTACHMENT_NAME = "RagdollAttachment"
-local COLLIDE_ATTRIBUTE = "RagdollMadeCollidable" -- ラグドールの間だけ地面とぶつかるようにした部位の印
+local COLLIDER_NAME = "RagdollCollider" -- ラグドールの間だけ、地面とぶつからない部位に付ける見えない当たり判定
 local FRICTION_ATTRIBUTE = "RagdollChangedFriction" -- ラグドールの間だけ摩擦を変えた部位の印
 
 -- ラグドールにする関節。HumanoidRootPart と胴体をつなぐ関節（RootJoint）は残し、HumanoidRootPart を胴体についてこさせる
@@ -70,10 +70,52 @@ function Ragdoll.enable(character)
 	for _, motor in ipairs(getLimbMotors(character)) do
 		createSocket(motor)
 		motor.Enabled = false
-		-- 普段は地面とぶつからない部位（R6 の腕と脚）も、ラグドールの間はぶつかるようにする（そのままだと地面にめり込む）
+		-- 普段は地面とぶつからない部位（R6 の腕と脚）も、ラグドールの間はぶつかるようにする（そのままだと地面にめり込む）。
+		-- 部位そのものの CanCollide をオンにしても、Humanoid が毎フレームオフに戻すため、同じ大きさの見えない部品を溶接する
 		if not motor.Part1.CanCollide then
-			motor.Part1.CanCollide = true
-			motor.Part1:SetAttribute(COLLIDE_ATTRIBUTE, true)
+			local limb = motor.Part1
+			local collider = Instance.new("Part")
+			collider.Name = COLLIDER_NAME
+			collider.Size = limb.Size
+			collider.CFrame = limb.CFrame
+			collider.Transparency = 1
+			collider.Massless = true -- 重さを足さず、飛び方や回り方を変えない
+			collider.CanTouch = false -- 叩かれる判定（Hitbox の Touched）やレイキャストの対象にしない
+			collider.CanQuery = false
+			collider.CastShadow = false
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = limb
+			weld.Part1 = collider
+			weld.Parent = collider
+			collider.Parent = limb
+		end
+	end
+
+	-- 見えない部品が自分の胴体・頭・ほかの見えない部品とぶつかると、手足の振れが止められる
+	-- （腕の部品は胴体の横に接しているので、腕がほとんど振れなくなった）。地面とだけぶつかるよう、自分の体とはぶつからないようにする。
+	-- 設定は見えない部品の中に置くので、起き上がるときに部品ごと消える
+	local colliders, bodyParts = {}, {}
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			if part.Name == COLLIDER_NAME then
+				table.insert(colliders, part)
+			elseif part.CanCollide then
+				table.insert(bodyParts, part)
+			end
+		end
+	end
+	local function preventCollision(collider, other)
+		local constraint = Instance.new("NoCollisionConstraint")
+		constraint.Part0 = collider
+		constraint.Part1 = other
+		constraint.Parent = collider
+	end
+	for index, collider in ipairs(colliders) do
+		for _, other in ipairs(bodyParts) do
+			preventCollision(collider, other)
+		end
+		for otherIndex = index + 1, #colliders do
+			preventCollision(collider, colliders[otherIndex])
 		end
 	end
 
@@ -126,9 +168,9 @@ function Ragdoll.disable(character)
 			socket.Attachment1:Destroy()
 			socket:Destroy()
 		end
-		if motor.Part1:GetAttribute(COLLIDE_ATTRIBUTE) then
-			motor.Part1.CanCollide = false
-			motor.Part1:SetAttribute(COLLIDE_ATTRIBUTE, nil)
+		local collider = motor.Part1:FindFirstChild(COLLIDER_NAME)
+		if collider then
+			collider:Destroy()
 		end
 	end
 	for _, part in ipairs(character:GetDescendants()) do

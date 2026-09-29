@@ -139,7 +139,7 @@ local function tryHit(hitPart)
 	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage))
 	local function launchTarget()
 		if not target.Parent then return end -- 押し込んでいる間に対象が消えた（リスポーンなど）
-		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle), feedback.Spins)
+		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle), feedback.Spins, feedback.DownTime)
 		-- 飛距離の表示は吹き飛んでから始める（数字と小画面が実際の飛び出しと揃う）
 		reportDistance(attacker, target, direction, Knockback.getDistance(power, angle), Knockback.getFlightTime(power, angle))
 	end

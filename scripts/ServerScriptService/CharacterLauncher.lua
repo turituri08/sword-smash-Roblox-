@@ -25,6 +25,16 @@ local function waitUntilLanding(character, rootPart)
 	end
 end
 
+-- 着地した体が転がり終わって止まるまで待つ（倒れている時間は、止まってから数える。転がっている間は倒れているように見えないため）。
+-- 転がり続けて止まらない場合に備えて、MaxSettleTime で打ち切る
+local function waitUntilSettled(rootPart)
+	local ragdoll = CombatConfig.Ragdoll
+	local elapsed = 0
+	while elapsed < ragdoll.MaxSettleTime and rootPart.AssemblyLinearVelocity.Magnitude >= ragdoll.SettleSpeed do
+		elapsed += task.wait()
+	end
+end
+
 -- 後ろ宙返りの向きの回転と、少しだけランダムなひねり。滞空中に spins 回転する速さにする
 local function getSpin(velocity, spins)
 	local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
@@ -36,7 +46,8 @@ local function getSpin(velocity, spins)
 	return flipAxis * (spins * 2 * math.pi / flightTime) + Vector3.yAxis * twist
 end
 
-function CharacterLauncher.launch(character, velocity, spins)
+-- spins: 滞空中に後ろへ回る回数。downTime: 着地してから倒れたままでいる秒数（Ragdoll.MaxDownTime で頭打ち）
+function CharacterLauncher.launch(character, velocity, spins, downTime)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not humanoid or not rootPart then return end
@@ -63,7 +74,8 @@ function CharacterLauncher.launch(character, velocity, spins)
 
 	task.spawn(function()
 		waitUntilLanding(character, rootPart)
-		task.wait(CombatConfig.Ragdoll.LieTime)
+		waitUntilSettled(rootPart)
+		task.wait(math.min(downTime, CombatConfig.Ragdoll.MaxDownTime))
 		if not character.Parent or character:GetAttribute("LaunchCount") ~= launchCount then return end
 		Ragdoll.disable(character)
 		humanoid.PlatformStand = false

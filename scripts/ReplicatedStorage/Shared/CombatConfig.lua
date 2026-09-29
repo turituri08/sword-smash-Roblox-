@@ -37,11 +37,12 @@ CombatConfig.HitFeedback = {
 		-- Spins: 飛ばされた相手（ラグドール）が、滞空中に後ろへ回る回数
 		-- BurstSize: 当たった相手から弾けるトゲの星の半径（長いトゲの長さ、stud）
 		-- TargetShake: 当たってから飛ぶまで、相手の体が震える揺れ幅（stud）
+		-- DownTime: 飛ばされた相手が着地して止まってから、倒れたままでいる秒数（Ragdoll.MaxDownTime を超えない）
 		-- 溜めなし（0）の当たりには揺れ・振動・当たった場所の演出を出さないので、その値は持たない
-		[0] = { ImpactDuration = 0, PushDistance = 0, Spins = 0.5 },
-		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, ShockwaveSize = 4.5, SparkCount = 10, Spins = 0.75, BurstSize = 3, TargetShake = 0.25 },
-		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, ShockwaveSize = 5.5, SparkCount = 14, Spins = 1, BurstSize = 4, TargetShake = 0.35 },
-		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, ShockwaveSize = 6.5, SparkCount = 20, Spins = 1.5, BurstSize = 5.5, TargetShake = 0.5 },
+		[0] = { ImpactDuration = 0, PushDistance = 0, Spins = 0.5, DownTime = 0.5 },
+		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, ShockwaveSize = 4.5, SparkCount = 10, Spins = 0.75, BurstSize = 3, TargetShake = 0.25, DownTime = 0.65 },
+		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, ShockwaveSize = 5.5, SparkCount = 14, Spins = 1, BurstSize = 4, TargetShake = 0.35, DownTime = 0.8 },
+		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, ShockwaveSize = 6.5, SparkCount = 20, Spins = 1.5, BurstSize = 5.5, TargetShake = 0.5, DownTime = 1 },
 	},
 	PushTilt = 15, -- 押し込む間に相手の上体を後ろへ傾ける角度（度）
 	-- 引っかかりの時間のうち、この割合の時点で相手を飛ばす（振り抜き始める手前）。飛ぶまでの間、相手は押し込まれながら震える。
@@ -120,7 +121,12 @@ CombatConfig.Ragdoll = {
 	DefaultJoint = { UpperAngle = 45, TwistLowerAngle = -30, TwistUpperAngle = 30 },
 	MaxTwistSpeed = 3, -- 回転に加える、ランダムなひねりの最大の速さ（ラジアン/秒）
 	Friction = 1.5,    -- ラグドールの間の体の摩擦（素材のプラスチックは0.3）。小さいと着地後に長く滑る
-	LieTime = 0.5,     -- 着地してから倒れたままでいる秒数
+	-- 着地した体が転がり終わって止まったとみなす速さ（stud/秒）。倒れている時間（DownTime）は止まってから数える
+	SettleSpeed = 3,
+	MaxSettleTime = 1, -- 止まるのを待つ秒数の上限（転がり続けて止まらない場合に備える）
+	-- 止まってから倒れたままでいる秒数の上限。秒数は溜めの段階ごと（HitFeedback.Stages の DownTime）。
+	-- 強い溜めほど長く倒れるが、長すぎるとなかなか起き上がれず鬱陶しいので、どれだけ強くてもこれを超えない
+	MaxDownTime = 1,
 	GetUpTime = 0.3,   -- 起き上がりにかける秒数
 }
 
