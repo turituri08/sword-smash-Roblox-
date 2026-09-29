@@ -1,6 +1,6 @@
 -- Studio配置: StarterPack > Bat (Tool) > LocalScript（プレイヤー側で実行される）
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
---       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の閃光などもここで出す。
+--       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の星・衝撃波・火花、相手の震えもここで出す。
 --       ボタンへの反応を遅らせないよう、サーバーを経由せずここで再生する
 --       （自分のキャラクターのアニメーションは、プレイヤー側で再生しても他のプレイヤーに同期される）。
 --       溜めの秒数や段階、当たり・吹き飛ばしの判定はサーバー側のScriptが行い、ここでは見た目と手触りだけを扱う。
@@ -14,6 +14,7 @@ local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local ChargeStages = require(Shared:WaitForChild("ChargeStages"))
 local Knockback = require(Shared:WaitForChild("Knockback"))
 local HitEffects = require(Shared:WaitForChild("HitEffects"))
+local TargetShake = require(Shared:WaitForChild("TargetShake"))
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
@@ -161,6 +162,7 @@ local function predictHit(hitPart)
 		shakeCamera(feedback.ShakeAngle, duration)
 		local direction = Knockback.getDirection(character.HumanoidRootPart, targetRoot)
 		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage)
+		TargetShake.play(target, direction, swingStage)
 		-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す
 		vibrate(feedback.Vibration, duration)
 	end

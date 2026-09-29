@@ -32,19 +32,21 @@ CombatConfig.HitFeedback = {
 		-- PushDistance: その間に相手を叩かれた向きへ押し込む距離（stud）
 		-- ShakeAngle: 叩いた人のカメラを揺らす最大の角度（度）
 		-- Vibration: 当たってから引っかかりが終わるまでの、コントローラーの振動の強さ（0〜1）
-		-- FlashSize / RingSize: 当たった場所の閃光・衝撃波の輪が広がり切ったときの大きさ（stud）
+		-- ShockwaveSize: 当たった場所から広がる衝撃波の輪が、広がり切ったときの半径（stud）
 		-- SparkCount: 当たった場所から飛び散る火花の数
 		-- Spins: 飛ばされた相手（ラグドール）が、滞空中に後ろへ回る回数
+		-- BurstSize: 当たった相手から弾けるトゲの星の半径（長いトゲの長さ、stud）
+		-- TargetShake: 当たってから飛ぶまで、相手の体が震える揺れ幅（stud）
 		-- 溜めなし（0）の当たりには揺れ・振動・当たった場所の演出を出さないので、その値は持たない
 		[0] = { ImpactDuration = 0, PushDistance = 0, Spins = 0.5 },
-		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, FlashSize = 4, RingSize = 6, SparkCount = 14, Spins = 0.75 },
-		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, FlashSize = 5, RingSize = 8, SparkCount = 22, Spins = 1 },
-		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, FlashSize = 7, RingSize = 11, SparkCount = 35, Spins = 1.5 },
+		[1] = { ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0.8, Vibration = 0.5, ShockwaveSize = 4.5, SparkCount = 10, Spins = 0.75, BurstSize = 3, TargetShake = 0.25 },
+		[2] = { ImpactDuration = 0.45, PushDistance = 1.8, ShakeAngle = 1.2, Vibration = 0.75, ShockwaveSize = 5.5, SparkCount = 14, Spins = 1, BurstSize = 4, TargetShake = 0.35 },
+		[3] = { ImpactDuration = 0.6, PushDistance = 2.8, ShakeAngle = 1.8, Vibration = 1, ShockwaveSize = 6.5, SparkCount = 20, Spins = 1.5, BurstSize = 5.5, TargetShake = 0.5 },
 	},
 	PushTilt = 15, -- 押し込む間に相手の上体を後ろへ傾ける角度（度）
-	-- 引っかかりの時間のうち、この割合の時点で相手を飛ばす（振り抜き始める少し手前）。
-	-- 公開環境では相手が飛ぶのが通信の往復ぶん遅れて見えるため、早めに飛ばしてその遅れを隠す
-	LaunchAt = 0.25,
+	-- 引っかかりの時間のうち、この割合の時点で相手を飛ばす（振り抜き始める手前）。飛ぶまでの間、相手は押し込まれながら震える。
+	-- 公開環境では相手が飛ぶのが通信の往復ぶん遅れて見えるため、振り抜きより早めに飛ばしてその遅れを隠す（0.5 なら往復0.15秒まで隠せる）
+	LaunchAt = 0.5,
 	-- カメラの揺れ方（全段階で共通）
 	Shake = {
 		Frequency = 25,         -- 1秒に揺れる回数
@@ -53,18 +55,45 @@ CombatConfig.HitFeedback = {
 		LaunchPulseRatio = 0.5, -- 相手が飛ぶ瞬間の揺れの強さ（ShakeAngle に対する割合）
 		SideRatio = 0.3,        -- 横の揺れの強さ（縦の揺れに対する割合）
 	},
-	-- 当たった場所の閃光・衝撃波の輪・火花（全段階で共通）。色は溜めの段階色、大きさと数は Stages で段階ごとに決める
-	Effect = {
-		FlashTime = 0.15,    -- 閃光が広がって消えるまでの秒数
-		RingTime = 0.25,     -- 衝撃波の輪が広がって消えるまでの秒数
-		LightBrightness = 5, -- 周りを一瞬照らす光の明るさ
-		LightRange = 12,
-		SparkSpeedMin = 15,  -- 火花の飛ぶ速さ（stud/秒）
-		SparkSpeedMax = 30,
-		SparkLifetime = 0.4, -- 火花が消えるまでの秒数
-		SparkSpread = 35,    -- 火花が広がる角度（度）。相手が飛ぶ向きを中心にした円錐
-		SparkSize = 0.3,
-		SparkGravity = 40,   -- 火花を下へ引く強さ
+	-- 当たった場所から飛び散る火花（全段階で共通）。光る細い棒を、段階色と白を混ぜて飛ばす。数は Stages の SparkCount
+	Sparks = {
+		SpeedMin = 40,      -- 飛び出す速さ（stud/秒）。星と衝撃波の輪に隠れないよう、外まで勢いよく飛ばす
+		SpeedMax = 80,
+		Lifetime = 0.45,    -- 消えるまでの秒数（1本ずつ、この6〜10割でばらす）
+		Spread = 75,        -- 広がる角度（度）。相手が飛ぶ向きを中心にした円錐。
+		                    -- 叩いた人からは飛ぶ向きが画面の奥になるので、広げて横にも散らさないと放射状に見えない
+		Width = 0.2,        -- 出た瞬間の太さ（stud）。細くなりながら消える
+		StreakTime = 0.04,  -- 線の長さ（速さに掛ける秒数）。速いほど長い線に見える
+		Gravity = 60,       -- 下へ引く強さ
+		Drag = 2,           -- 空気で減速する強さ
+		WhiteRatio = 0.4,   -- 白い火花の割合（残りは段階色）
+	},
+	-- 当たった相手から弾けるトゲの星（全段階で共通）。白い芯のトゲの後ろに段階色の縁のトゲを重ねて、くっきり見せる。
+	-- 大きさは Stages の BurstSize
+	Burst = {
+		SpikeCount = 8,      -- トゲの本数。長いトゲと短いトゲを交互に並べる
+		ShortRatio = 0.55,   -- 短いトゲの長さ（長いトゲに対する割合）
+		SpikeWidth = 0.3,    -- トゲの根元の幅（長さに対する割合）
+		OutlineScale = 1.3,  -- 段階色の縁のトゲの大きさ（白い芯のトゲに対する割合）
+		CoreSize = 0.6,      -- 中心の白い丸の直径（星の半径に対する割合）
+		OpenTime = 0.04,     -- 開き切るまでの秒数
+		HoldTime = 0.05,     -- 開いたまま止まる秒数
+		FadeTime = 0.12,     -- 細くなりながら消えるまでの秒数
+		CameraOffset = 1.5,  -- 当たった場所からカメラ寄りに出す距離（stud）。体に埋もれず、相手の手前で弾けて見える
+		LaunchRatio = 0.6,   -- 相手が飛ぶ瞬間に出す二発目の星の大きさ（一発目に対する割合）
+	},
+	-- 当たった場所から広がる衝撃波の輪（全段階で共通）。白い輪の外側に段階色の輪を並べて、くっきり見せる。
+	-- 大きさは Stages の ShockwaveSize
+	Shockwave = {
+		SegmentCount = 24,  -- 輪を作る板の枚数（多いほど丸く見える）
+		StartRatio = 0.3,   -- 出た瞬間の輪の大きさ（広がり切ったときに対する割合）
+		Time = 0.25,        -- 広がって消えるまでの秒数
+		Thickness = 0.15,   -- 出た瞬間の白い輪の太さ（半径に対する割合）。広がりながら細くなる
+		OutlineRatio = 0.6, -- 段階色の輪の太さ（白い輪に対する割合）
+	},
+	-- 当たってから飛ぶまで、相手の体を小刻みに震わせる（全段階で共通）。揺れ幅は Stages の TargetShake
+	TargetShake = {
+		Frequency = 30, -- 1秒に左右を往復する回数
 	},
 }
 

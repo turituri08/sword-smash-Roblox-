@@ -123,14 +123,14 @@ local function tryHit(hitPart)
 
 	local direction = Knockback.getDirection(attacker.HumanoidRootPart, targetRoot)
 
-	-- 当たった場所の閃光などを、叩いた本人以外の画面に出させる（本人は自分の当たりの予測から先に出している）。
+	-- 当たった場所の星・衝撃波・火花と相手の震えを、叩いた本人以外の画面に出させる（本人は自分の当たりの予測から先に出している）。
 	-- 溜めなしの軽い当たりには演出を出さない
 	if swingStage > 0 then
 		local contactPoint = HitEffects.getContactPoint(hitPart, hitbox.Position)
 		local attackerPlayer = Players:GetPlayerFromCharacter(attacker)
 		for _, player in ipairs(Players:GetPlayers()) do
 			if player ~= attackerPlayer then
-				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage)
+				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target)
 			end
 		end
 	end
