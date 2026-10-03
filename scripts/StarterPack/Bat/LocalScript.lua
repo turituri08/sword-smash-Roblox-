@@ -50,20 +50,6 @@ local function getGaugeElapsed()
 	return if elapsed >= 0 then elapsed else nil
 end
 
--- 溜めている間、毎フレームゲージを動かす。最大段階に届いた時点でゲージを出す
-local function startGauge()
-	gaugeConnection = RunService.RenderStepped:Connect(function()
-		local elapsed = getGaugeElapsed()
-		if not elapsed then return end
-		if not gaugeBillboard then
-			local rootPart = tool.Parent:FindFirstChild("HumanoidRootPart")
-			if not rootPart then return end
-			gaugeBillboard = TimingGaugeDisplay.create(rootPart, Players.LocalPlayer.PlayerGui)
-		end
-		TimingGaugeDisplay.setPosition(gaugeBillboard, TimingGauge.getPosition(elapsed))
-	end)
-end
-
 local function stopGauge()
 	if gaugeConnection then
 		gaugeConnection:Disconnect()
@@ -73,6 +59,28 @@ local function stopGauge()
 		gaugeBillboard:Destroy()
 		gaugeBillboard = nil
 	end
+end
+
+-- 溜めている間、毎フレームゲージを動かす。最大段階に届いた時点でゲージを出す
+local function startGauge()
+	-- R2 をゆっくり押し込んだり連打したりすると、離した合図（Deactivated）が届かないまま、押した合図（Activated）が
+	-- 続けて来ることがある。前のゲージを片付けずに始めると、前の毎フレームの処理が残り、離してもゲージが消えなくなる
+	stopGauge()
+	gaugeConnection = RunService.RenderStepped:Connect(function()
+		-- 念のため、溜めていないのに動いていたら止める（ゲージが残り続けないようにする）
+		if not isCharging then
+			stopGauge()
+			return
+		end
+		local elapsed = getGaugeElapsed()
+		if not elapsed then return end
+		if not gaugeBillboard then
+			local rootPart = tool.Parent:FindFirstChild("HumanoidRootPart")
+			if not rootPart then return end
+			gaugeBillboard = TimingGaugeDisplay.create(rootPart, Players.LocalPlayer.PlayerGui)
+		end
+		TimingGaugeDisplay.setPosition(gaugeBillboard, TimingGauge.getPosition(elapsed))
+	end)
 end
 
 -- 振動を止める予約が、後から始めた振動まで止めないように、何回目の振動かを数える
