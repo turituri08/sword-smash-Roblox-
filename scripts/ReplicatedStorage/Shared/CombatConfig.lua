@@ -220,7 +220,7 @@ CombatConfig.TimingGauge = {
 }
 
 -- 決めの一瞬。虹で当てたとき、叩いた本人と叩かれた本人（プレイヤーの場合）の画面に出す。
--- 物理演算は遅くできないので、引っかかり（TimingGauge.HitFeedback.Rainbow）を長くして、その間に画面を暗くしてカメラを寄せ、スローに見せる
+-- 物理演算は遅くできないので、引っかかり（TimingGauge.HitFeedback.Rainbow）を長くして、その間に画面を暗くしてカメラを寄せ、集中線を出してスローに見せる
 CombatConfig.CriticalCinematic = {
 	FadeInTime = 0.08,  -- 当たってから画面が暗くなり切るまでの秒数
 	ZoomRatio = 0.6,    -- 飛ぶ瞬間の視野の広さ（元の FieldOfView に対する割合）。当たった瞬間に大きく寄り、飛ぶまでじわじわ寄り続ける
@@ -232,6 +232,65 @@ CombatConfig.CriticalCinematic = {
 	FlashTransparency = 0.15, -- 飛ぶ瞬間の白い光の、出た瞬間の透明度（0で真っ白）
 	FlashTime = 0.3,     -- 白い光が消えるまでの秒数
 	RecoverTime = 0.25,  -- 飛んでから、暗さとズームが元に戻るまでの秒数
+	-- 当たってから飛ぶまで、画面の端から中心へ向かう集中線（漫画の効果線）。数フレームごとに並べ直してチラつかせる。
+	-- 長さ・太さは画面の高さに対する割合
+	FocusLines = {
+		Count = 48,
+		InnerRadius = { 0.32, 0.5 },  -- 線の内側の端の、画面中心からの距離（画面の対角線の半分に対する割合。この範囲でばらす）
+		Width = { 0.004, 0.012 },     -- 線の太さ（ばらす範囲）
+		Color = Color3.fromRGB(255, 255, 255),
+		Transparency = 0.15,          -- 外側の端の透明度。内側の端へ向かって透明になる
+		RefreshTime = 0.05,           -- 並べ直す間隔（秒）
+	},
+}
+
+-- 当たったときのアメコミ風の文字。タイミングゲージの結果だけで出す（ゲージが出る前に離した当たりには出さない）。
+-- 叩いた本人と叩かれた本人（プレイヤーの場合）の画面にだけ、当たった瞬間の相手の頭の右上に固定して出す。
+-- 大きさは stud（離れるほど小さく見える）
+CombatConfig.HitText = {
+	Font = Enum.Font.LuckiestGuy, -- 太くて丸みのあるアメコミ風のフォント（大文字だけ）
+	Offset = Vector3.new(3, 2.5, 0), -- 頭から、画面の右・上へずらす量（stud）
+	ScaleRoom = 1.3,     -- 文字が弾んで大きくなっても切れないよう、表示する枠を広げる倍率
+	LetterSpacing = 0.85, -- 文字の間隔（縁まで含めた文字の幅に対する割合）。隣の文字と重ならない、ふつうの文字の並びに見える間隔
+	Tilt = 12,           -- 言葉全体を右下がりに傾ける角度（度）。文字もこの角度に傾ける
+	MaxRotation = 4,     -- 1文字ずつ、さらに傾きをばらす角度の最大（度）。ばらしすぎず、勢いだけ出す
+	SizeJitter = 0.05,   -- 1文字ずつ大きさをばらす割合
+	RaiseJitter = 0.03,  -- 1文字ずつ上下にずらす量（文字の高さに対する割合）
+	PopTime = 0.16,      -- 虹が飛ぶ瞬間に、1倍 → 大きめ → 1倍と弾み終わるまでの秒数
+	Jitter = 0.02,       -- 出た後に震わせる幅（文字の高さに対する割合）
+	FadeTime = 0.25,     -- 消えるまでの秒数
+	StrokeRatio = 0.07,      -- 黒い縁の太さ（文字の高さに対する割合）
+	OuterStrokeRatio = 0.06, -- 黒い縁の外側に重ねる、結果の色の縁の太さ
+	RainbowCycleTime = 0.6,  -- 虹の文字の色が1周流れる秒数
+	-- 結果ごとの見た目。FillColor は文字の中、OuterColor は黒い縁の外側の縁。
+	-- LetterHeight は文字の高さ（stud）、HoldTime は出てから消え始めるまでの秒数（虹は飛ぶ瞬間から数える）、
+	-- FadeScale は消えるときの大きさの倍率（1より小さいと縮む）、FadeDrop は消えるときに下へ垂れる距離（stud）
+	Styles = {
+		Miss = {
+			Text = "weak...", FillColor = Color3.fromRGB(170, 170, 170), OuterColor = Color3.fromRGB(255, 50, 50),
+			LetterHeight = 1.05, HoldTime = 0.35, FadeScale = 0.6, FadeDrop = 1.2,
+		},
+		Normal = {
+			Text = "NICE!", FillColor = Color3.fromRGB(255, 255, 255), OuterColor = Color3.fromRGB(255, 150, 30),
+			LetterHeight = 1.35, HoldTime = 0.45, FadeScale = 1.3, FadeDrop = 0,
+		},
+		Green = {
+			Text = "GREAT!!", FillColor = Color3.fromRGB(220, 255, 120), OuterColor = Color3.fromRGB(60, 255, 110),
+			LetterHeight = 1.7, HoldTime = 0.55, FadeScale = 1.35, FadeDrop = 0,
+		},
+		-- 虹: 決めの一瞬の間（飛ぶまで）に1文字ずつ溜めて出し、飛ぶ瞬間に全部の文字を弾けさせる。
+		-- Rainbow = true で文字の中を1文字ずつ違う虹色に流す。Grow は最後の文字の大きさの倍率で、先頭の文字を一番大きくし、後ろへ行くほど小さくする。
+		-- Arc は弧の曲がり具合（言葉の端から端までで曲がる角度、度）。真ん中が高く両端が下がる弧の上に並べ、少し丸みを持たせる。
+		-- Offset は HitText.Offset の差し替え。大きいので、決めの一瞬で寄っても画面からはみ出さず、押し込まれる相手を隠さない位置にする。
+		-- BuildUp は飛ぶまでの時間のうち文字を出し終えるまでの割合、BuildUpScale と BuildUpJitter は溜めている間の大きさと震えの倍率、
+		-- BurstPeak は飛ぶ瞬間に弾ける最大の倍率
+		Rainbow = {
+			Text = "SMAAAASH!!!", Rainbow = true, FillColor = Color3.fromRGB(255, 255, 255), OuterColor = Color3.fromRGB(255, 255, 255),
+			Offset = Vector3.new(1, 3, 0),
+			LetterHeight = 2.1, Grow = 0.6, Arc = 40, HoldTime = 0.7, FadeScale = 1.4, FadeDrop = 0,
+			BuildUp = 0.85, BuildUpScale = 0.8, BuildUpJitter = 3, BurstPeak = 1.5,
+		},
+	},
 }
 
 -- 溜めの演出。Stages の各行は Charge.Stages の同じ段階に対応する
