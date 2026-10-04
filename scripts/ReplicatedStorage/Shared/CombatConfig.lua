@@ -183,7 +183,7 @@ CombatConfig.TimingGauge = {
 	-- 当たったときの手応えのうち、結果によって差し替える値（HitFeedback.Stages の最大段階の行を上書きする）。
 	-- Color は星・衝撃波の輪・火花の色（段階色の代わり）。普通のときは差し替えない
 	HitFeedback = {
-		-- 虹: 引っかかりを長くして、決めの一瞬（CriticalCinematic）を見せてから飛ばす。
+		-- 虹: 引っかかりを長くして、決めの一瞬（FinishCinematic）を見せてから飛ばす。
 		-- Rainbow = true で星・衝撃波の輪・火花を1本ずつ違う色の虹色にする。
 		-- LaunchAt は HitFeedback.LaunchAt の差し替え。長い引っかかりの後半まで止めて見せ、残り0.2秒で飛ばす（通信の遅れを隠すには0.15秒あれば足りる）。
 		-- LaunchPulseRatio は Shake.LaunchPulseRatio の差し替え。飛ぶ瞬間にも大きく揺らす
@@ -221,7 +221,7 @@ CombatConfig.TimingGauge = {
 
 -- 決めの一瞬。虹で当てたとき、叩いた本人と叩かれた本人（プレイヤーの場合）の画面に出す。
 -- 物理演算は遅くできないので、引っかかり（TimingGauge.HitFeedback.Rainbow）を長くして、その間に画面を暗くしてカメラを寄せ、集中線を出してスローに見せる
-CombatConfig.CriticalCinematic = {
+CombatConfig.FinishCinematic = {
 	FadeInTime = 0.08,  -- 当たってから画面が暗くなり切るまでの秒数
 	ZoomRatio = 0.6,    -- 飛ぶ瞬間の視野の広さ（元の FieldOfView に対する割合）。当たった瞬間に大きく寄り、飛ぶまでじわじわ寄り続ける
 	-- 暗くしている間の色の補正（ColorCorrectionEffect）。色を薄く・暗くして、星や火花の光を際立たせる

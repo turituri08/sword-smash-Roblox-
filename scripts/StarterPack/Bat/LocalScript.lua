@@ -2,7 +2,7 @@
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
 --       溜め切った後のタイミングゲージを出し、離したら経過秒数を付けてサーバーへ知らせる（Remotes.ChargeRelease）。
 --       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の星・衝撃波・火花、相手の震えもここで出す。
---       タイミングゲージの結果に合わせたアメコミ風の文字（HitText）と、虹で当てたときの決めの一瞬（CriticalCinematic）も出す。
+--       タイミングゲージの結果に合わせたアメコミ風の文字（HitText）と、虹で当てたときの決めの一瞬（FinishCinematic）も出す。
 --       ボタンへの反応を遅らせないよう、サーバーを経由せずここで再生する
 --       （自分のキャラクターのアニメーションは、プレイヤー側で再生しても他のプレイヤーに同期される）。
 --       溜めの秒数や段階、当たり・吹き飛ばしの判定はサーバー側のScriptが行い、ここでは見た目と手触りだけを扱う。
@@ -20,7 +20,7 @@ local HitEffects = require(Shared:WaitForChild("HitEffects"))
 local TargetShake = require(Shared:WaitForChild("TargetShake"))
 local TimingGauge = require(Shared:WaitForChild("TimingGauge"))
 local TimingGaugeDisplay = require(Shared:WaitForChild("TimingGaugeDisplay"))
-local CriticalCinematic = require(Shared:WaitForChild("CriticalCinematic"))
+local FinishCinematic = require(Shared:WaitForChild("FinishCinematic"))
 local HitText = require(Shared:WaitForChild("HitText"))
 
 local tool = script.Parent
@@ -258,7 +258,7 @@ local function predictHit(hitPart)
 		HitText.play(target, swingGaugeResult, launchDelay)
 	end
 	if swingGaugeResult == "Rainbow" then
-		CriticalCinematic.play(launchDelay)
+		FinishCinematic.play(launchDelay)
 	end
 	-- サーバー側と同じく、押し込み中（相手が飛ぶまで）は次の溜めを始められない
 	nextChargeAllowedAt = math.max(nextChargeAllowedAt, os.clock() + launchDelay + CombatConfig.Swing.Cooldown)

@@ -1,4 +1,4 @@
--- Studio配置: ReplicatedStorage > Shared > CriticalCinematic（ModuleScript）
+-- Studio配置: ReplicatedStorage > Shared > FinishCinematic（ModuleScript）
 -- 役割: 虹で当てたときの決めの一瞬。当たってから飛ぶまで画面を暗くしてカメラを寄せ、集中線を出し、飛ぶ瞬間に白く光らせて元に戻す。
 --       プレイヤー側でだけ使う（叩いた本人は Bat の LocalScript、叩かれた本人は HitEffectReceiver から呼ぶ）。
 --       物理演算は遅くできないので、引っかかりを長くした時間（TimingGauge.HitFeedback.Rainbow）を、この演出でスローに見せる
@@ -9,14 +9,14 @@ local TweenService = game:GetService("TweenService")
 
 local CombatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 
-local CriticalCinematic = {}
+local FinishCinematic = {}
 
 -- 演出中の状態はカメラの属性に持たせる（モジュールには状態を持たせない）。
 -- 演出中にもう一度虹が出たとき、寄った視野ではなく演出前の視野に戻すため
 local BASE_FOV_ATTRIBUTE = "CinematicBaseFieldOfView"
 local COUNT_ATTRIBUTE = "CinematicCount"
-local CORRECTION_NAME = "CriticalCinematicCorrection"
-local FOCUS_LINES_NAME = "CriticalFocusLines"
+local CORRECTION_NAME = "FinishCinematicCorrection"
+local FOCUS_LINES_NAME = "FinishFocusLines"
 
 local function tween(instance, duration, style, properties)
 	local tweenObject = TweenService:Create(instance, TweenInfo.new(duration, style, Enum.EasingDirection.Out), properties)
@@ -26,9 +26,9 @@ end
 
 -- 飛ぶ瞬間の白い光。画面全体を白い板で覆い、透明にしながら消す
 local function flash()
-	local cinematic = CombatConfig.CriticalCinematic
+	local cinematic = CombatConfig.FinishCinematic
 	local gui = Instance.new("ScreenGui")
-	gui.Name = "CriticalFlash"
+	gui.Name = "FinishFlash"
 	gui.IgnoreGuiInset = true -- 画面上部のバーの下まで覆う
 	gui.DisplayOrder = 100    -- 飛距離の表示などより手前に出す
 	gui.ResetOnSpawn = false
@@ -48,7 +48,7 @@ end
 
 -- 画面の端から中心へ向かう集中線を duration 秒出す。数フレームごとに並べ直してチラつかせ、漫画の効果線のように見せる
 local function showFocusLines(duration)
-	local config = CombatConfig.CriticalCinematic.FocusLines
+	local config = CombatConfig.FinishCinematic.FocusLines
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local previous = playerGui:FindFirstChild(FOCUS_LINES_NAME)
 	if previous then
@@ -112,8 +112,8 @@ local function showFocusLines(duration)
 end
 
 -- launchDelay: 当たってから相手が飛ぶまでの秒数（ChargeStages.getLaunchDelay）
-function CriticalCinematic.play(launchDelay)
-	local cinematic = CombatConfig.CriticalCinematic
+function FinishCinematic.play(launchDelay)
+	local cinematic = CombatConfig.FinishCinematic
 	local camera = workspace.CurrentCamera
 	local baseFieldOfView = camera:GetAttribute(BASE_FOV_ATTRIBUTE) or camera.FieldOfView
 	camera:SetAttribute(BASE_FOV_ATTRIBUTE, baseFieldOfView)
@@ -154,4 +154,4 @@ function CriticalCinematic.play(launchDelay)
 	end)
 end
 
-return CriticalCinematic
+return FinishCinematic
