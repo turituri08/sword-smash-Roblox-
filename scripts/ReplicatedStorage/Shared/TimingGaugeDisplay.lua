@@ -3,6 +3,8 @@
 --       作った BillboardGui を返すだけで、状態は持たない（持ち主は Bat の LocalScript）。
 --       プレイヤー側で作るので、叩く本人にだけ見える
 
+local TweenService = game:GetService("TweenService")
+
 local CombatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 local TimingGauge = require(script.Parent:WaitForChild("TimingGauge"))
 
@@ -79,15 +81,40 @@ function TimingGaugeDisplay.create(rootPart, parent)
 	return billboard
 end
 
--- 下の端から position（0が下の端、1が上の端）までを塗りつぶす。塗りの色は、塗りの先がある帯の色にする
+-- ゲージ上の位置 middle の部品の虹色。時間とともに色相をずらして、虹が流れるように見せる
+local function getRainbowColor(middle, value)
+	local gauge = CombatConfig.TimingGauge
+	local display = gauge.Display
+	local hue = (middle * display.RainbowSpread - os.clock() / display.RainbowCycleTime) % 1
+	return Color3.fromHSV(hue, gauge.RainbowSaturation, value)
+end
+
+-- 下の端から position（0が下の端、1が上の端）までを塗りつぶす。塗りの色は、塗りの先がある帯の色にする。
+-- 虹は時間で色が流れるので、毎フレーム呼ぶ（塗りの先が動いていなくても色を更新する）
 function TimingGaugeDisplay.setPosition(billboard, position)
 	local display = CombatConfig.TimingGauge.Display
-	local fillColor = display.FillColors[TimingGauge.getZone(position)]
+	local fillZone = TimingGauge.getZone(position)
 	for _, segment in ipairs(billboard[SEGMENTS_NAME]:GetChildren()) do
-		segment.BackgroundColor3 = if segment:GetAttribute("Middle") <= position
-			then fillColor
-			else display.EmptyColors[segment:GetAttribute("Zone")]
+		local middle = segment:GetAttribute("Middle")
+		local zone = segment:GetAttribute("Zone")
+		if middle <= position then
+			segment.BackgroundColor3 = if fillZone == "Rainbow" then getRainbowColor(middle, 1) else display.FillColors[fillZone]
+		elseif zone == "Rainbow" then
+			segment.BackgroundColor3 = getRainbowColor(middle, display.RainbowEmptyValue)
+		else
+			segment.BackgroundColor3 = display.EmptyColors[zone]
+		end
 	end
+end
+
+-- 離した位置で止めたゲージを、一瞬大きくしてから元の大きさへ弾むように戻し、結果を目立たせる
+function TimingGaugeDisplay.popResult(billboard)
+	local display = CombatConfig.TimingGauge.Display
+	local popSize = display.Size * display.ResultPopScale
+	billboard.Size = UDim2.fromScale(popSize, popSize)
+	TweenService:Create(billboard, TweenInfo.new(display.ResultPopTime, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.fromScale(display.Size, display.Size),
+	}):Play()
 end
 
 return TimingGaugeDisplay

@@ -22,7 +22,7 @@ function TargetShake.play(target, direction, stage, gaugeResult)
 	if not rootJoint then return end
 
 	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult)
-	local duration = feedback.ImpactDuration * CombatConfig.HitFeedback.LaunchAt -- 相手が飛ぶまで
+	local duration = ChargeStages.getLaunchDelay(feedback) -- 相手が飛ぶまで
 	local frequency = CombatConfig.HitFeedback.TargetShake.Frequency
 	-- 叩く向きに垂直な横方向へ揺らす（叩く向きに揺らすと、押し込みの動きに紛れて見えにくい）
 	local sideAxis = Vector3.yAxis:Cross(direction)

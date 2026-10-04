@@ -161,7 +161,7 @@ CombatConfig.Charge = {
 }
 
 -- 溜め切った後のタイミングゲージ。最大段階に達すると、キャラクターの横に上下へ往復するゲージが出る（叩く本人にだけ見える）。
--- 上の端（緑）で離すと極大、下の端（赤）で離すとミス、その間は普通の吹っ飛ばし。時間切れはない
+-- 上の端（緑）で離すと極大、そのさらに端（虹）で離すと決めの一瞬を出す最大の吹っ飛ばし、下の端（赤）で離すとミス、その間は普通の吹っ飛ばし。時間切れはない
 local GAUGE_GREEN = Color3.fromRGB(60, 255, 110)
 local GAUGE_MISS = Color3.fromRGB(255, 50, 50)
 CombatConfig.TimingGauge = {
@@ -169,15 +169,25 @@ CombatConfig.TimingGauge = {
 	-- ゲージが出た瞬間の位置（0が下の端、1が上の端）。赤の少し上から上向きに動き始め、溜め切ってすぐ離しても赤にならないようにする
 	StartPosition = 0.2,
 	GreenZone = 0.1,     -- 上の端から、この割合までが緑。上の端で折り返すので、緑にいる時間は1往復で 2 × GreenZone × TravelTime 秒。スキルで広げる想定
+	-- 上の端から、この割合までが虹（緑の中のさらに端）。1往復で約0.05秒（60fpsで約3フレーム）しかない、狙ってもなかなか出ない幅
+	RainbowZone = 0.04,
 	MissZone = 0.15,     -- 下の端から、この割合までが赤
 	-- 吹っ飛ばしの倍率。最大溜めの倍率（Charge.Stages の最後の Multiplier）に掛ける。緑の倍率はスキルで増やす想定
-	Multipliers = { Green = 1.2, Normal = 1, Miss = 0.7 },
-	-- 離した合図には、プレイヤー側で計ったゲージの経過秒数を付けて送る。その値は通信の片道ぶんサーバーの値より小さくなるので、
-	-- サーバーの値からこの秒数小さい値までは信用する。それより外れた値は、この範囲に収めてから判定する（ずらせるのはこの幅だけ）
-	MaxLatency = 0.3,
+	Multipliers = { Rainbow = 1.5, Green = 1.2, Normal = 1, Miss = 0.7 },
+	RainbowSaturation = 0.85, -- 虹色の鮮やかさ（ゲージと当たった場所の演出で共通）
+	-- 離した合図には、プレイヤー側で計ったゲージの経過秒数（画面に最後に映した時点）を付けて送り、判定はその値を信頼する。
+	-- サーバーの秒数は「押した合図が届いてから離した合図が届くまで」なので、通信の遅れは打ち消し合い、ずれるのは遅れのばらつきぶんだけ。
+	-- サーバーの値から前後この秒数より外れた、明らかにおかしい値だけ、この範囲に収めてから判定する。
+	-- ばらつき（数十ミリ秒）よりずっと広くとり、まともなプレイヤーの判定には影響させない
+	MaxClientDrift = 0.3,
 	-- 当たったときの手応えのうち、結果によって差し替える値（HitFeedback.Stages の最大段階の行を上書きする）。
 	-- Color は星・衝撃波の輪・火花の色（段階色の代わり）。普通のときは差し替えない
 	HitFeedback = {
+		-- 虹: 引っかかりを長くして、決めの一瞬（CriticalCinematic）を見せてから飛ばす。
+		-- Rainbow = true で星・衝撃波の輪・火花を1本ずつ違う色の虹色にする。
+		-- LaunchAt は HitFeedback.LaunchAt の差し替え。長い引っかかりの後半まで止めて見せ、残り0.2秒で飛ばす（通信の遅れを隠すには0.15秒あれば足りる）。
+		-- LaunchPulseRatio は Shake.LaunchPulseRatio の差し替え。飛ぶ瞬間にも大きく揺らす
+		Rainbow = { Rainbow = true, ImpactDuration = 1.0, LaunchAt = 0.8, PushDistance = 3.5, ShakeAngle = 3, LaunchPulseRatio = 1.2, Vibration = 1, BurstSize = 9, ShockwaveSize = 11, SparkCount = 40, TargetShake = 0.7, Spins = 3, DownTime = 1 },
 		Green = { Color = GAUGE_GREEN, ShakeAngle = 2.4, BurstSize = 7, ShockwaveSize = 8.5, SparkCount = 28, TargetShake = 0.6, Spins = 2 },
 		-- ミスは手応えを抜く: 小さな赤い星だけ出し、衝撃波の輪・火花・カメラの揺れは出さず、振動と引っかかりも弱くする
 		Miss = { Color = GAUGE_MISS, ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0, Vibration = 0.3, BurstSize = 2, ShockwaveSize = 0, SparkCount = 0, TargetShake = 0.15, Spins = 0.5, DownTime = 0.5 },
@@ -198,9 +208,30 @@ CombatConfig.TimingGauge = {
 		-- 塗られていないところの色。緑・赤の帯は暗い色で見せておき、どこを狙えばよいか分かるようにする。
 		-- 部品どうしが少し重なっているので、半透明にすると重なりが縞に見える。暗さは透明度ではなく色で出す
 		EmptyColors = { Green = Color3.fromRGB(25, 110, 50), Normal = Color3.fromRGB(40, 40, 40), Miss = Color3.fromRGB(120, 25, 25) },
-		-- 塗りの色。塗りの先がある帯で決まる
+		-- 塗りの色。塗りの先がある帯で決まる（虹のときは、塗り全体を虹色に流す）
 		FillColors = { Green = GAUGE_GREEN, Normal = Color3.fromRGB(255, 255, 255), Miss = GAUGE_MISS },
+		RainbowCycleTime = 0.5,  -- 虹色が1周流れる秒数
+		RainbowSpread = 1.5,     -- 弧の下の端から上の端までに並ぶ虹の周数（塗り全体が虹になったときの色の細かさ）
+		RainbowEmptyValue = 0.5, -- 塗られていない虹の帯の明るさ（0〜1）。暗い虹色で流して、狙う場所を見せる
+		ResultHoldTime = 0.35,   -- 離した位置でゲージを止めて結果を見せる秒数
+		ResultPopScale = 1.25,   -- 止めた瞬間に、ゲージを一瞬この倍率まで大きくする（ポンと弾ませて結果を目立たせる）
+		ResultPopTime = 0.15,    -- 大きくしたゲージが元の大きさに戻るまでの秒数
 	},
+}
+
+-- 決めの一瞬。虹で当てたとき、叩いた本人と叩かれた本人（プレイヤーの場合）の画面に出す。
+-- 物理演算は遅くできないので、引っかかり（TimingGauge.HitFeedback.Rainbow）を長くして、その間に画面を暗くしてカメラを寄せ、スローに見せる
+CombatConfig.CriticalCinematic = {
+	FadeInTime = 0.08,  -- 当たってから画面が暗くなり切るまでの秒数
+	ZoomRatio = 0.6,    -- 飛ぶ瞬間の視野の広さ（元の FieldOfView に対する割合）。当たった瞬間に大きく寄り、飛ぶまでじわじわ寄り続ける
+	-- 暗くしている間の色の補正（ColorCorrectionEffect）。色を薄く・暗くして、星や火花の光を際立たせる
+	Saturation = -0.7,
+	Brightness = -0.15,
+	Contrast = 0.3,
+	TintColor = Color3.fromRGB(215, 220, 255), -- 少し青みがかった色にして、時間が止まった感じを出す
+	FlashTransparency = 0.15, -- 飛ぶ瞬間の白い光の、出た瞬間の透明度（0で真っ白）
+	FlashTime = 0.3,     -- 白い光が消えるまでの秒数
+	RecoverTime = 0.25,  -- 飛んでから、暗さとズームが元に戻るまでの秒数
 }
 
 -- 溜めの演出。Stages の各行は Charge.Stages の同じ段階に対応する

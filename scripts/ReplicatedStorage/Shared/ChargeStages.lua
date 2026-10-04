@@ -36,6 +36,12 @@ function ChargeStages.getHitFeedback(stage, gaugeResult)
 	return merged
 end
 
+-- 当たってから相手を飛ばすまでの秒数。引っかかり（ImpactDuration）のうち LaunchAt の割合の時点。
+-- 虹のように、手応えの値で LaunchAt を差し替えている場合はその値を使う
+function ChargeStages.getLaunchDelay(feedback)
+	return feedback.ImpactDuration * (feedback.LaunchAt or CombatConfig.HitFeedback.LaunchAt)
+end
+
 -- 段階に対応する振りの再生速度。溜めた振りは当たるまで遅く振り下ろして重さを出す
 function ChargeStages.getSwingSpeed(stage)
 	local swing = CombatConfig.Swing

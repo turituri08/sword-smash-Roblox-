@@ -4,7 +4,7 @@
 --       将来的にここから ServerScriptService/SwordService へ移行する想定。
 -- 溜めた秒数はサーバーがここで測る（プレイヤー側から秒数を受け取らないことでチートを防ぐ）。
 -- ただし溜め切った後のタイミングゲージだけは、画面の見た目と判定を揃えるため、プレイヤー側で計った秒数を
--- 上限付きで信用する（TimingGauge.resolveElapsed）。そのため離した合図は tool.Deactivated ではなく、
+-- 明らかにおかしい値だけ弾いて信用する（TimingGauge.resolveElapsed）。そのため離した合図は tool.Deactivated ではなく、
 -- 秒数を付けられる Remotes.ChargeRelease で受け取る
 
 local Players = game:GetService("Players")
@@ -152,7 +152,7 @@ local function tryHit(hitPart)
 	end
 
 	-- 押し込み: 当たった瞬間の引っかかり（ImpactDuration 秒）の間に、相手を叩かれた向きへ押し込み、
-	-- 上体を後ろへ傾けてから吹き飛ばす。引っかかりが終わる少し手前、LaunchAt の割合の時点で飛ばす。
+	-- 上体を後ろへ傾けてから吹き飛ばす。引っかかりが終わる少し手前、LaunchAt の割合の時点で飛ばす（ChargeStages.getLaunchDelay）。
 	-- 叩いた人の振りは、プレイヤー側が自分で当たりを判定して同じ時間だけゆっくり再生する
 	-- （サーバーからの通知を待つと、通信の遅れのぶん減速が遅れるため）
 	if feedback.ImpactDuration <= 0 then
@@ -166,7 +166,7 @@ local function tryHit(hitPart)
 		* targetRoot.CFrame.Rotation
 	-- 固定した HumanoidRootPart を動かすと、関節でつながった体全体がついてくる。
 	-- 一定の速さ（Linear）で押し込み、押している間ずっと相手が動いて見えるようにする（途中で止まると固まって見える）
-	local pushTime = feedback.ImpactDuration * CombatConfig.HitFeedback.LaunchAt
+	local pushTime = ChargeStages.getLaunchDelay(feedback)
 	pushEndTime = os.clock() + pushTime
 	targetRoot.Anchored = true
 	TweenService:Create(targetRoot, TweenInfo.new(pushTime, Enum.EasingStyle.Linear), {
@@ -223,7 +223,8 @@ chargeReleaseEvent.OnServerEvent:Connect(function(player, clientGaugeElapsed)
 	local gaugeResult = nil
 	if stage == ChargeStages.getMaxStage() then
 		local serverGaugeElapsed = elapsed - TimingGauge.getStartTime()
-		gaugeResult = TimingGauge.getResult(TimingGauge.resolveElapsed(clientGaugeElapsed, serverGaugeElapsed))
+		local resolvedElapsed = TimingGauge.resolveElapsed(clientGaugeElapsed, serverGaugeElapsed)
+		gaugeResult = TimingGauge.getResult(resolvedElapsed)
 	end
 	swing(stage, gaugeResult)
 end)

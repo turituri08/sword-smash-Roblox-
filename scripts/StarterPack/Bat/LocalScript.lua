@@ -2,6 +2,7 @@
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
 --       溜め切った後のタイミングゲージを出し、離したら経過秒数を付けてサーバーへ知らせる（Remotes.ChargeRelease）。
 --       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の星・衝撃波・火花、相手の震えもここで出す。
+--       虹で当てたときは、決めの一瞬（CriticalCinematic）も出す。
 --       ボタンへの反応を遅らせないよう、サーバーを経由せずここで再生する
 --       （自分のキャラクターのアニメーションは、プレイヤー側で再生しても他のプレイヤーに同期される）。
 --       溜めの秒数や段階、当たり・吹き飛ばしの判定はサーバー側のScriptが行い、ここでは見た目と手触りだけを扱う。
@@ -19,6 +20,7 @@ local HitEffects = require(Shared:WaitForChild("HitEffects"))
 local TargetShake = require(Shared:WaitForChild("TargetShake"))
 local TimingGauge = require(Shared:WaitForChild("TimingGauge"))
 local TimingGaugeDisplay = require(Shared:WaitForChild("TimingGaugeDisplay"))
+local CriticalCinematic = require(Shared:WaitForChild("CriticalCinematic"))
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
@@ -43,6 +45,9 @@ local nextChargeAllowedAt = 0
 local chargeStartedAt = 0
 local gaugeBillboard = nil
 local gaugeConnection = nil
+-- 画面に最後に映したゲージの経過秒数。離したときはこの値で判定する。
+-- 離した合図を受け取る時刻はその画面より1〜2フレーム遅く、幅の狭い虹ではそのぶんで外れてしまうため、見えていた位置で判定する
+local displayedGaugeElapsed = nil
 
 -- ゲージが出てからの秒数。まだ出ていない（最大段階に届いていない）ならnil
 local function getGaugeElapsed()
@@ -66,6 +71,7 @@ local function startGauge()
 	-- R2 をゆっくり押し込んだり連打したりすると、離した合図（Deactivated）が届かないまま、押した合図（Activated）が
 	-- 続けて来ることがある。前のゲージを片付けずに始めると、前の毎フレームの処理が残り、離してもゲージが消えなくなる
 	stopGauge()
+	displayedGaugeElapsed = nil
 	gaugeConnection = RunService.RenderStepped:Connect(function()
 		-- 念のため、溜めていないのに動いていたら止める（ゲージが残り続けないようにする）
 		if not isCharging then
@@ -80,6 +86,31 @@ local function startGauge()
 			gaugeBillboard = TimingGaugeDisplay.create(rootPart, Players.LocalPlayer.PlayerGui)
 		end
 		TimingGaugeDisplay.setPosition(gaugeBillboard, TimingGauge.getPosition(elapsed))
+		displayedGaugeElapsed = elapsed
+	end)
+end
+
+-- 離した位置でゲージを少しの間止め、ポンと大きくして結果の色を見せてから消す（2K のシュートメーターのように、
+-- どこで止めたか分かるようにして「もう少し早く」を伝える）。elapsed は判定に使った秒数（ゲージが出る前に離したならnil）。
+-- 止めている間に次の溜めを始めたら、startGauge の stopGauge で片付く
+local function freezeGauge(elapsed)
+	if not elapsed or not gaugeBillboard then
+		stopGauge()
+		return
+	end
+	if gaugeConnection then
+		gaugeConnection:Disconnect()
+	end
+	local billboard = gaugeBillboard
+	local position = TimingGauge.getPosition(elapsed)
+	local startedAt = os.clock()
+	TimingGaugeDisplay.popResult(billboard)
+	gaugeConnection = RunService.RenderStepped:Connect(function()
+		if os.clock() - startedAt >= CombatConfig.TimingGauge.Display.ResultHoldTime then
+			stopGauge()
+			return
+		end
+		TimingGaugeDisplay.setPosition(billboard, position) -- 虹は止めている間も色を流す
 	end)
 end
 
@@ -106,11 +137,14 @@ local function decay(elapsed, decayTime)
 end
 
 -- 叩いた人のカメラを揺らす。当たった瞬間に強く揺れ、引っかかりの間は弱く震え続け（押し込んでいる感じ）、
--- 相手が飛ぶ瞬間にもう一度小さく揺れる
+-- 相手が飛ぶ瞬間にもう一度揺れる（虹では大きく揺らす）。feedback は当たったときの手応えの値（ChargeStages.getHitFeedback）
 local SHAKE_BINDING = "HitShake"
-local function shakeCamera(angle, catchDuration)
+local function shakeCamera(feedback)
 	local shake = CombatConfig.HitFeedback.Shake
-	local launchTime = catchDuration * CombatConfig.HitFeedback.LaunchAt
+	local angle = feedback.ShakeAngle
+	local catchDuration = feedback.ImpactDuration
+	local launchTime = ChargeStages.getLaunchDelay(feedback)
+	local launchPulseRatio = feedback.LaunchPulseRatio or shake.LaunchPulseRatio
 	local endTime = math.max(catchDuration, launchTime + shake.DecayTime)
 	local startedAt = os.clock()
 
@@ -126,7 +160,7 @@ local function shakeCamera(angle, catchDuration)
 		if elapsed < catchDuration then
 			strength = math.max(strength, shake.TrembleRatio)
 		end
-		strength += shake.LaunchPulseRatio * decay(elapsed - launchTime, shake.DecayTime)
+		strength += launchPulseRatio * decay(elapsed - launchTime, shake.DecayTime)
 		-- 振り下ろしに合わせて主に上下に揺らす。横は周期をずらして少しだけ揺らし、単調な往復に見えないようにする
 		local phase = elapsed * shake.Frequency * 2 * math.pi
 		local pitch = angle * strength * math.sin(phase)
@@ -209,28 +243,31 @@ local function predictHit(hitPart)
 	hasPredictedHit = true
 	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult)
 	local duration = feedback.ImpactDuration
+	local launchDelay = ChargeStages.getLaunchDelay(feedback)
 	catchSwing(duration)
 	-- 溜めなしの軽い当たりには、揺れ・振動・当たった場所の演出を出さない（溜めた一撃との差を出す）
 	if swingStage > 0 then
-		shakeCamera(feedback.ShakeAngle, duration)
+		shakeCamera(feedback)
 		local direction = Knockback.getDirection(character.HumanoidRootPart, targetRoot)
 		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage, swingGaugeResult)
 		TargetShake.play(target, direction, swingStage, swingGaugeResult)
 		-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す
 		vibrate(feedback.Vibration, duration)
 	end
+	if swingGaugeResult == "Rainbow" then
+		CriticalCinematic.play(launchDelay)
+	end
 	-- サーバー側と同じく、押し込み中（相手が飛ぶまで）は次の溜めを始められない
-	local launchDelay = duration * CombatConfig.HitFeedback.LaunchAt
 	nextChargeAllowedAt = math.max(nextChargeAllowedAt, os.clock() + launchDelay + CombatConfig.Swing.Cooldown)
 end
 
 hitbox.Touched:Connect(predictHit)
 
 tool.Deactivated:Connect(function()
-	-- サーバーに振らせる。ゲージが出ていれば、離した瞬間の経過秒数を付ける（サーバーは溜めていなければ無視する）
-	local gaugeElapsed = if isCharging then getGaugeElapsed() else nil
+	-- サーバーに振らせる。ゲージが出ていれば、画面に最後に映した時点の経過秒数を付ける（サーバーは溜めていなければ無視する）
+	local gaugeElapsed = if isCharging then displayedGaugeElapsed else nil
 	chargeReleaseEvent:FireServer(gaugeElapsed)
-	stopGauge()
+	freezeGauge(gaugeElapsed)
 
 	if not isCharging or not slashTrack then return end
 	isCharging = false

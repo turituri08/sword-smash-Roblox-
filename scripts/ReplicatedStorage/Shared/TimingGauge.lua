@@ -20,10 +20,13 @@ function TimingGauge.getPosition(elapsed)
 	return if travelled <= 1 then travelled else 2 - travelled
 end
 
--- ゲージ上の位置（0〜1）がどの帯か: "Green"（極大）・"Normal"（普通）・"Miss"（ミス）
+-- ゲージ上の位置（0〜1）がどの帯か: "Rainbow"（虹。極大のさらに上）・"Green"（極大）・"Normal"（普通）・"Miss"（ミス）。
+-- 虹は緑の中のさらに端なので、緑より先に調べる
 function TimingGauge.getZone(position)
 	local gauge = CombatConfig.TimingGauge
-	if position >= 1 - gauge.GreenZone then
+	if position >= 1 - gauge.RainbowZone then
+		return "Rainbow"
+	elseif position >= 1 - gauge.GreenZone then
 		return "Green"
 	elseif position <= gauge.MissZone then
 		return "Miss"
@@ -42,13 +45,15 @@ function TimingGauge.getMultiplier(result)
 	return CombatConfig.TimingGauge.Multipliers[result]
 end
 
--- サーバーが判定に使う経過秒数を決める。プレイヤー側から届いた値を、サーバーで計った値から MaxLatency 秒小さい値までの範囲に収める。
--- プレイヤー側の値を使うのは、画面で緑に見えたときに緑にするため（サーバーの値は通信の片道ぶん遅れて大きくなる）
+-- サーバーが判定に使う経過秒数を決める。プレイヤー側から届いた値を、サーバーで計った値の前後 MaxClientDrift 秒の範囲に収める。
+-- プレイヤー側の値を使うのは、画面で虹・緑に見えたときにその結果にするため。サーバーの値は通信の遅れのばらつき（数十ミリ秒）でずれ、
+-- 約0.05秒しかない虹では外れてしまう。タイミングの腕前は自動で離す道具を使われるとサーバーでも防げないので、明らかにおかしい値だけ弾く
 function TimingGauge.resolveElapsed(clientElapsed, serverElapsed)
 	if type(clientElapsed) ~= "number" or clientElapsed ~= clientElapsed then -- 数でない値や NaN はサーバーの値を使う
 		return serverElapsed
 	end
-	return math.clamp(clientElapsed, math.max(serverElapsed - CombatConfig.TimingGauge.MaxLatency, 0), serverElapsed)
+	local drift = CombatConfig.TimingGauge.MaxClientDrift
+	return math.clamp(clientElapsed, math.max(serverElapsed - drift, 0), serverElapsed + drift)
 end
 
 return TimingGauge
