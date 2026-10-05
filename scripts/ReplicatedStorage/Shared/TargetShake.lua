@@ -14,14 +14,14 @@ local TargetShake = {}
 local BASE_C0_ATTRIBUTE = "ShakeBaseC0"
 local COUNT_ATTRIBUTE = "ShakeCount"
 
--- direction は叩く向き（水平）。stage は1以上（溜めなしの当たりには出さないので、呼ぶ側で除く）。
--- gaugeResult はタイミングゲージの結果（ゲージが出る前に離したなら nil）
-function TargetShake.play(target, direction, stage, gaugeResult)
+-- direction は叩く向き（水平）。演出を出す当たりだけ呼ぶ（ChargeStages.hasHitEffects）。
+-- gaugeResult はタイミングゲージの結果（ゲージが出る前に離したなら nil）、isCritical は会心の一撃か
+function TargetShake.play(target, direction, stage, gaugeResult, isCritical)
 	local rootPart = target and target:FindFirstChild("HumanoidRootPart")
 	local rootJoint = rootPart and rootPart:FindFirstChild("RootJoint")
 	if not rootJoint then return end
 
-	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult)
+	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult, isCritical)
 	local duration = ChargeStages.getLaunchDelay(feedback) -- 相手が飛ぶまで
 	local frequency = CombatConfig.HitFeedback.TargetShake.Frequency
 	-- 叩く向きに垂直な横方向へ揺らす（叩く向きに揺らすと、押し込みの動きに紛れて見えにくい）

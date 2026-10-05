@@ -218,6 +218,7 @@ end)
 -- 振ってから当たり判定が終わるまでの状態（サーバー側の当たり判定と同じ時間だけ有効）
 local swingStage = 0
 local swingGaugeResult = nil -- 自分で判定したタイミングゲージの結果（ゲージが出る前に離したならnil）
+local swingCritical = false -- 離した時点で会心の一撃を発動していたか
 local canPredictHit = false
 local hasPredictedHit = false
 
@@ -242,22 +243,23 @@ local function predictHit(hitPart)
 	if not targetRoot then return end
 
 	hasPredictedHit = true
-	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult)
+	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult, swingCritical)
 	local duration = feedback.ImpactDuration
 	local launchDelay = ChargeStages.getLaunchDelay(feedback)
 	catchSwing(duration)
-	-- 溜めなしの軽い当たりには、揺れ・振動・当たった場所の演出を出さない（溜めた一撃との差を出す）
-	if swingStage > 0 then
+	-- 溜めなしの軽い当たりには、会心でなければ揺れ・振動・当たった場所の演出を出さない（溜めた一撃との差を出す）
+	if ChargeStages.hasHitEffects(swingStage, swingCritical) then
 		shakeCamera(feedback)
 		local direction = Knockback.getDirection(character.HumanoidRootPart, targetRoot)
-		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage, swingGaugeResult)
-		TargetShake.play(target, direction, swingStage, swingGaugeResult)
+		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage, swingGaugeResult, swingCritical)
+		TargetShake.play(target, direction, swingStage, swingGaugeResult, swingCritical)
 		-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す
-		vibrate(feedback.Vibration, duration)
+		-- （引っかかりのない溜めない振りの会心でも、短く振動させる）
+		vibrate(feedback.Vibration, math.max(duration, CombatConfig.ChargeEffects.VibrationDuration))
 		-- ゲージの結果の文字（ゲージが出る前に離した当たりには出さない）
 		HitText.play(target, swingGaugeResult, launchDelay)
 	end
-	if swingGaugeResult == "Rainbow" then
+	if feedback.Cinematic then
 		FinishCinematic.play(launchDelay)
 	end
 	-- サーバー側と同じく、押し込み中（相手が飛ぶまで）は次の溜めを始められない
@@ -279,6 +281,8 @@ tool.Deactivated:Connect(function()
 	-- 当たりの演出に使う結果。サーバーも同じ秒数で判定するので、ふつうは同じ結果になる
 	-- （通信がとても遅いと、サーバーが秒数を補正して結果が変わり、見た目だけずれることがある）
 	swingGaugeResult = if swingStage == ChargeStages.getMaxStage() and gaugeElapsed then TimingGauge.getResult(gaugeElapsed) else nil
+	-- 会心かどうかはサーバーが書く属性から読む。発動の直後に離すと、属性がまだ届いておらず見た目だけ会心にならないことがある
+	swingCritical = Players.LocalPlayer:GetAttribute("CriticalActive") == true
 	local hitStart, hitEnd = ChargeStages.getHitWindow(swingStage)
 	nextChargeAllowedAt = os.clock() + hitEnd + CombatConfig.Swing.Cooldown
 

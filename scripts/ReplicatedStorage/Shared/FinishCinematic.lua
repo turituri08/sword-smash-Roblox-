@@ -1,5 +1,5 @@
 -- Studio配置: ReplicatedStorage > Shared > FinishCinematic（ModuleScript）
--- 役割: 虹で当てたときの決めの一瞬。当たってから飛ぶまで画面を暗くしてカメラを寄せ、集中線を出し、飛ぶ瞬間に白く光らせて元に戻す。
+-- 役割: 虹で当てたときの決めの一瞬（手応えの値の Cinematic が true のとき）。当たってから飛ぶまで画面を暗くしてカメラを寄せ、集中線を出し、飛ぶ瞬間に白く光らせて元に戻す。
 --       プレイヤー側でだけ使う（叩いた本人は Bat の LocalScript、叩かれた本人は HitEffectReceiver から呼ぶ）。
 --       物理演算は遅くできないので、引っかかりを長くした時間（TimingGauge.HitFeedback.Rainbow）を、この演出でスローに見せる
 

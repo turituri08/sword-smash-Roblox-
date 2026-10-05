@@ -13,13 +13,15 @@ local TargetShake = require(Shared:WaitForChild("TargetShake"))
 local FinishCinematic = require(Shared:WaitForChild("FinishCinematic"))
 local HitText = require(Shared:WaitForChild("HitText"))
 
-ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("HitEffect").OnClientEvent:Connect(function(position, direction, stage, target, gaugeResult)
-	HitEffects.play(position, direction, stage, gaugeResult)
-	TargetShake.play(target, direction, stage, gaugeResult)
+-- isCritical は会心の一撃か
+ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("HitEffect").OnClientEvent:Connect(function(position, direction, stage, target, gaugeResult, isCritical)
+	HitEffects.play(position, direction, stage, gaugeResult, isCritical)
+	TargetShake.play(target, direction, stage, gaugeResult, isCritical)
 	if target ~= Players.LocalPlayer.Character then return end
-	local launchDelay = ChargeStages.getLaunchDelay(ChargeStages.getHitFeedback(stage, gaugeResult))
+	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult, isCritical)
+	local launchDelay = ChargeStages.getLaunchDelay(feedback)
 	HitText.play(target, gaugeResult, launchDelay)
-	if gaugeResult == "Rainbow" then
+	if feedback.Cinematic then
 		FinishCinematic.play(launchDelay)
 	end
 end)

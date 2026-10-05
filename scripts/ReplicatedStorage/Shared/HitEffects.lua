@@ -1,5 +1,5 @@
 -- Studio配置: ReplicatedStorage > Shared > HitEffects（ModuleScript）
--- 役割: 当たった場所に、相手から弾けるトゲの星・衝撃波の輪・火花を、溜めの段階色（タイミングゲージが緑・赤ならその色、虹なら虹色）で出す。どれも光る部品で作り、はっきりした形に見せる。
+-- 役割: 当たった場所に、相手から弾けるトゲの星・衝撃波の輪・火花を、溜めの段階色（タイミングゲージが緑・赤ならその色、虹なら虹色、会心なら金色）で出す。どれも光る部品で作り、はっきりした形に見せる。
 --       演出はプレイヤー側で作り、毎フレーム動かす（サーバーで動かすと、他のプレイヤーには通信の間隔でカクついて見える）。
 --       叩いた本人は自分の当たりの予測から、他のプレイヤーはサーバーからの知らせ（Remotes.HitEffect）を受けて呼ぶ。
 --       当たった場所の計算はサーバーも使うので、ここに置く
@@ -252,10 +252,11 @@ local function playSparks(position, direction, count, pickColor)
 	end)
 end
 
--- stage は1以上（溜めなしの当たりには演出を出さないので、呼ぶ側で除く）。
--- gaugeResult はタイミングゲージの結果（ゲージが出る前に離したなら nil）。虹・緑・赤なら大きさと色が変わる
-function HitEffects.play(position, direction, stage, gaugeResult)
-	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult)
+-- 演出を出す当たりだけ呼ぶ（ChargeStages.hasHitEffects。溜めなしの当たりには、会心でなければ出さない）。
+-- gaugeResult はタイミングゲージの結果（ゲージが出る前に離したなら nil）。虹・緑・赤なら大きさと色が変わる。
+-- isCritical は会心の一撃か。会心なら金色にして大きくする
+function HitEffects.play(position, direction, stage, gaugeResult, isCritical)
+	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult, isCritical)
 	local pickColor = getColorPicker(stage, feedback)
 
 	-- 相手が飛ぶ向き（打ち出す角度で斜め上）。衝撃波の輪の面の向きと、火花の飛ぶ向きに使う

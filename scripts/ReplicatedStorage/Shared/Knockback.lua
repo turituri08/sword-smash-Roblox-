@@ -8,12 +8,19 @@ local CombatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 
 local Knockback = {}
 
--- 打撃の強さと角度を決める。timingMultiplier はタイミングゲージの倍率（TimingGauge.getMultiplier）。
--- スキル補正や蓄積ダメージは今後ここに足していく
-function Knockback.resolve(chargeMultiplier, timingMultiplier)
+-- 打撃の強さと角度を決める。timingMultiplier はタイミングゲージの倍率（TimingGauge.getMultiplier）、
+-- criticalMultiplier は会心の倍率（Knockback.getCriticalMultiplier）。スキル補正や蓄積ダメージは今後ここに足していく
+function Knockback.resolve(chargeMultiplier, timingMultiplier, criticalMultiplier)
 	local launch = CombatConfig.Launch
-	local power = math.min(launch.BasePower * chargeMultiplier * timingMultiplier, launch.MaxPower)
+	local power = math.min(launch.BasePower * chargeMultiplier * timingMultiplier * criticalMultiplier, launch.MaxPower)
 	return power, launch.Angle
+end
+
+-- 会心の倍率。会心でなければ1倍。溜めた振り（段階1以上）の会心は、さらに ChargedMultiplier を掛ける
+function Knockback.getCriticalMultiplier(isCritical, stage)
+	if not isCritical then return 1 end
+	local critical = CombatConfig.Critical
+	return critical.Multiplier * (if stage > 0 then critical.ChargedMultiplier else 1)
 end
 
 -- 叩く向き（水平方向の単位ベクトル）。高さの差が混ざると、飛距離の計算値と実際の飛び方がずれるため水平だけにする。

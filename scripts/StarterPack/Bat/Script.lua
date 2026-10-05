@@ -20,6 +20,7 @@ local HitEffects = require(ReplicatedStorage.Shared.HitEffects)
 local TimingGauge = require(ReplicatedStorage.Shared.TimingGauge)
 local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
+local CriticalMeter = require(ServerScriptService.CriticalMeter)
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
@@ -52,6 +53,7 @@ local canHit = false          -- 当たり判定が有効な間だけtrue
 local hasHitThisSwing = false -- 1回の振りにつき1体だけ吹き飛ばす
 local swingStage = 0          -- 今の振りの溜め段階
 local swingGaugeResult = nil  -- 今の振りのタイミングゲージの結果（ゲージが出る前に離したならnil）
+local swingCritical = false   -- 今の振りが会心の一撃か（離した時点で会心を発動していたか）
 local pushEndTime = 0         -- 押し込みが終わって相手が飛ぶ時刻。クールダウンはこれより後から数える
 
 -- 段階はキャラクターの属性にも書いておき、プレイヤー側（コントローラーの振動）から読めるようにする
@@ -129,21 +131,34 @@ local function tryHit(hitPart)
 	hasHitThisSwing = true
 
 	local direction = Knockback.getDirection(attacker.HumanoidRootPart, targetRoot)
+	local attackerPlayer = Players:GetPlayerFromCharacter(attacker)
+
+	-- 会心の一撃のゲージ: 会心の当たりなら使い切り、そうでなければ1つ溜める（空振りでは何も変わらない）
+	if attackerPlayer then
+		if swingCritical then
+			CriticalMeter.consume(attackerPlayer)
+		else
+			CriticalMeter.addHit(attackerPlayer)
+		end
+	end
 
 	-- 当たった場所の星・衝撃波・火花と相手の震えを、叩いた本人以外の画面に出させる（本人は自分の当たりの予測から先に出している）。
-	-- 溜めなしの軽い当たりには演出を出さない
-	if swingStage > 0 then
+	-- 溜めなしの軽い当たりには、会心でなければ演出を出さない
+	if ChargeStages.hasHitEffects(swingStage, swingCritical) then
 		local contactPoint = HitEffects.getContactPoint(hitPart, hitbox.Position)
-		local attackerPlayer = Players:GetPlayerFromCharacter(attacker)
 		for _, player in ipairs(Players:GetPlayers()) do
 			if player ~= attackerPlayer then
-				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target, swingGaugeResult)
+				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target, swingGaugeResult, swingCritical)
 			end
 		end
 	end
 
-	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult)
-	local power, angle = Knockback.resolve(ChargeStages.getMultiplier(swingStage), TimingGauge.getMultiplier(swingGaugeResult))
+	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult, swingCritical)
+	local power, angle = Knockback.resolve(
+		ChargeStages.getMultiplier(swingStage),
+		TimingGauge.getMultiplier(swingGaugeResult),
+		Knockback.getCriticalMultiplier(swingCritical, swingStage)
+	)
 	local function launchTarget()
 		if not target.Parent then return end -- 押し込んでいる間に対象が消えた（リスポーンなど）
 		CharacterLauncher.launch(target, Knockback.getVelocity(direction, power, angle), feedback.Spins, feedback.DownTime)
@@ -179,10 +194,11 @@ local function tryHit(hitPart)
 	end)
 end
 
-local function swing(stage, gaugeResult)
+local function swing(stage, gaugeResult, isCritical)
 	isSwinging = true
 	swingStage = stage
 	swingGaugeResult = gaugeResult
+	swingCritical = isCritical
 	hasHitThisSwing = false
 	pushEndTime = 0
 
@@ -226,7 +242,8 @@ chargeReleaseEvent.OnServerEvent:Connect(function(player, clientGaugeElapsed)
 		local resolvedElapsed = TimingGauge.resolveElapsed(clientGaugeElapsed, serverGaugeElapsed)
 		gaugeResult = TimingGauge.getResult(resolvedElapsed)
 	end
-	swing(stage, gaugeResult)
+	-- 会心は、離した合図が届いた時点で発動していればこの振りに乗る（振っている途中に発動したら次の振りから）
+	swing(stage, gaugeResult, CriticalMeter.isActive(player))
 end)
 
 -- 溜め中にバットをしまったら、振らずに溜めを取り消す

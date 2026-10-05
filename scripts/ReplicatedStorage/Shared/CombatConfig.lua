@@ -183,11 +183,11 @@ CombatConfig.TimingGauge = {
 	-- 当たったときの手応えのうち、結果によって差し替える値（HitFeedback.Stages の最大段階の行を上書きする）。
 	-- Color は星・衝撃波の輪・火花の色（段階色の代わり）。普通のときは差し替えない
 	HitFeedback = {
-		-- 虹: 引っかかりを長くして、決めの一瞬（FinishCinematic）を見せてから飛ばす。
+		-- 虹: 引っかかりを長くして、決めの一瞬（FinishCinematic）を見せてから飛ばす（Cinematic = true）。
 		-- Rainbow = true で星・衝撃波の輪・火花を1本ずつ違う色の虹色にする。
 		-- LaunchAt は HitFeedback.LaunchAt の差し替え。長い引っかかりの後半まで止めて見せ、残り0.2秒で飛ばす（通信の遅れを隠すには0.15秒あれば足りる）。
 		-- LaunchPulseRatio は Shake.LaunchPulseRatio の差し替え。飛ぶ瞬間にも大きく揺らす
-		Rainbow = { Rainbow = true, ImpactDuration = 1.0, LaunchAt = 0.8, PushDistance = 3.5, ShakeAngle = 3, LaunchPulseRatio = 1.2, Vibration = 1, BurstSize = 9, ShockwaveSize = 11, SparkCount = 40, TargetShake = 0.7, Spins = 3, DownTime = 1 },
+		Rainbow = { Rainbow = true, Cinematic = true, ImpactDuration = 1.0, LaunchAt = 0.8, PushDistance = 3.5, ShakeAngle = 3, LaunchPulseRatio = 1.2, Vibration = 1, BurstSize = 9, ShockwaveSize = 11, SparkCount = 40, TargetShake = 0.7, Spins = 3, DownTime = 1 },
 		Green = { Color = GAUGE_GREEN, ShakeAngle = 2.4, BurstSize = 7, ShockwaveSize = 8.5, SparkCount = 28, TargetShake = 0.6, Spins = 2 },
 		-- ミスは手応えを抜く: 小さな赤い星だけ出し、衝撃波の輪・火花・カメラの揺れは出さず、振動と引っかかりも弱くする
 		Miss = { Color = GAUGE_MISS, ImpactDuration = 0.3, PushDistance = 1.0, ShakeAngle = 0, Vibration = 0.3, BurstSize = 2, ShockwaveSize = 0, SparkCount = 0, TargetShake = 0.15, Spins = 0.5, DownTime = 0.5 },
@@ -290,6 +290,61 @@ CombatConfig.HitText = {
 			LetterHeight = 2.1, Grow = 0.6, Arc = 40, HoldTime = 0.7, FadeScale = 1.4, FadeDrop = 0,
 			BuildUp = 0.85, BuildUpScale = 0.8, BuildUpJitter = 3, BurstPeak = 1.5,
 		},
+	},
+}
+
+-- 会心の一撃。当たりの回数でゲージが溜まり、満タンで発動すると、次に当たった一撃が会心になる（空振りでは消えない。時間切れはない）。
+-- 虹（離すタイミングの腕前）とは別の機能で、重ねられる。ゲージの数と発動中かどうかはサーバーがプレイヤーの属性に持つ
+local CRITICAL_GOLD = Color3.fromRGB(255, 200, 40)
+CombatConfig.Critical = {
+	MaxCharge = 10,          -- 満タンになる当たりの回数。溜めない振りの当たりも数える（発動中と会心の当たりは数えない）
+	Multiplier = 1.2,        -- 会心の power の倍率
+	ChargedMultiplier = 1.2, -- 溜めた振り（段階1以上）の会心は、さらにこの倍率を掛ける（飛距離は power の2乗に比例する）
+	-- 会心の当たりの手応え。名前が Scale で終わる値は、元の値に掛ける倍率。
+	-- Color は星・衝撃波の輪・火花の色（虹のときは虹色のまま）。溜めない振りの会心は、段階1の演出を元にする（引っかかりはない）。
+	-- 決めの一瞬（FinishCinematic）は虹のときだけ出し、会心だけでは出さない（虹の特別さを残すため。ユーザーの判断）
+	HitFeedback = {
+		Color = CRITICAL_GOLD,
+		BurstSizeScale = 1.3,
+		ShockwaveSizeScale = 1.3,
+		SparkCountScale = 1.5,
+		ShakeAngleScale = 1.3,
+		SpinsScale = 1.3,
+	},
+	-- 発動中に体から出る気（スーパーサイヤ人風）。サーバーで付けるので全員に見える
+	Aura = {
+		Color = CRITICAL_GOLD,
+		-- 体に纏う気。高く立ちのぼらせず、体のすぐ周りではっきり金色に光らせる（ユーザーの判断）
+		Rate = 120,             -- 1秒に出す粒の数
+		Lifetime = { 0.45, 0.7 },
+		-- 粒の大きさ（stud）。出た瞬間の StartSize から、途中で PeakSize まで大きくなり、小さくなりながら消える
+		StartSize = 1.6,
+		PeakSize = 2.4,
+		-- 粒の明るさと、光を足し合わせる強さ。最初は LightEmission 1・明るさ1・大きさ1.6にしていたが、昼の明るい背景に溶けてほとんど見えなかった
+		Brightness = 6,
+		LightEmission = 0.8,
+		RiseSpeed = { 1.5, 3 }, -- 上へ立ちのぼる速さ（stud/秒）
+		RiseAcceleration = 3,   -- 上への加速。立ちのぼる勢いを出す
+		SpreadAngle = 5,        -- 立ちのぼる向きのばらつき（度）。小さいほど横に広がらない
+		-- 体そのものを金色に光らせる（Highlight）。溜めの光（ChargeEffects）と同時に付くと、後から付いた溜めの色が上に出て、溜め終わると金色に戻る
+		FillTransparency = 0.6,
+		OutlineColor = Color3.fromRGB(255, 230, 120),
+		LightBrightness = 3,
+		LightRange = 10,
+		ActivateBurst = 40,     -- 発動した瞬間に弾ける粒の数
+	},
+	-- 画面右下の発動ボタン。周りの輪の目盛りでゲージを見せる（目盛りの数は MaxCharge）。大きさはピクセル
+	Button = {
+		Size = 92,              -- コントローラー・キーボードのときのボタンの直径
+		Margin = 24,            -- 画面の右下の端からの距離
+		-- スマホ・タブレットでは、右下のジャンプボタン（画面が小さいと70、大きいと120ピクセル）の真上に置く
+		TouchScale = 1.1,       -- ジャンプボタンに対する大きさ
+		TouchGap = 16,          -- ジャンプボタンとの間
+		EmptyColor = Color3.fromRGB(60, 60, 60),
+		FilledColor = CRITICAL_GOLD,
+		-- 満タンのとき、READY と押すボタン名の文字、ボタンの縁を、FilledColor と ReadyGlowColor の間で明滅させる
+		ReadyPulseTime = 1.2,   -- 明滅の周期（秒）
+		ReadyGlowColor = Color3.fromRGB(255, 245, 190), -- 一番明るいときの色（白っぽい金色）
 	},
 }
 
