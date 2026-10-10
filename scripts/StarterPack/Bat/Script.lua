@@ -21,6 +21,7 @@ local TimingGauge = require(ReplicatedStorage.Shared.TimingGauge)
 local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
 local CriticalMeter = require(ServerScriptService.CriticalMeter)
+local MovementSpeed = require(ServerScriptService.MovementSpeed)
 
 local tool = script.Parent
 local hitbox = tool:WaitForChild("Hitbox")
@@ -45,7 +46,6 @@ end)
 local chargingCharacter = nil -- 溜め中のキャラクター（溜めていなければnil）
 local chargeStartTime = 0
 local chargeStage = 0
-local originalWalkSpeed = 16
 
 -- 振りの状態
 local isSwinging = false      -- 振ってからクールダウンが終わるまでtrue。この間は溜め始められない
@@ -69,8 +69,9 @@ local function startCharge(character)
 
 	chargingCharacter = character
 	chargeStartTime = os.clock()
-	originalWalkSpeed = humanoid.WalkSpeed
-	humanoid.WalkSpeed = originalWalkSpeed * CombatConfig.Charge.WalkSpeedMultiplier
+	-- 溜め中は歩く速さを落とす（速さを決めるのは MovementSpeed。走る仕組みと値を上書きし合わないように）
+	character:SetAttribute("Charging", true)
+	MovementSpeed.update(character)
 
 	-- 押している間、経過秒数を見て段階を上げる。最大段階に達したらそのまま保つ
 	task.spawn(function()
@@ -95,10 +96,8 @@ local function stopCharge()
 	local stage = ChargeStages.getStage(elapsed)
 
 	setChargeStage(character, 0)
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		humanoid.WalkSpeed = originalWalkSpeed
-	end
+	character:SetAttribute("Charging", nil)
+	MovementSpeed.update(character)
 	return stage, elapsed
 end
 

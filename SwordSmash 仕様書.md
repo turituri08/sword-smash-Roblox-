@@ -124,6 +124,10 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `CriticalAura`      | ServerScriptService      | ModuleScript | 作成済み（会心を発動している間の体の気。サーバーで付けるので全員に見える） |
 | `CriticalService`   | ServerScriptService      | Script       | 作成済み（発動の合図を受けて CriticalMeter に渡す。発動中にリスポーンしたら気を付け直す） |
 | `CriticalButton`    | StarterGui/CriticalHud   | LocalScript  | 作成済み（画面右下の会心のゲージと発動ボタン。L1・E・タップで発動を頼む） |
+| `SprintInput`       | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（プレイヤー→サーバーへの、走る／歩くの合図。true か false を送る） |
+| `MovementSpeed`     | ServerScriptService      | ModuleScript | 作成済み（歩く速さを、溜め中か・走っているかから決める。歩く速さを変えるのはここだけ） |
+| `SprintService`     | ServerScriptService      | Script       | 作成済み（走れる印 CanSprint を付け、走る合図を受けて歩く速さを変える） |
+| `SprintButton`      | StarterGui/SprintHud     | LocalScript  | 作成済み（左 Ctrl・L3・画面のボタンで走る合図を送る） |
 | `DistanceResult`    | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いたプレイヤーへの通知のみ） |
 | `HitEffect`         | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いた本人以外への、当たった場所の演出の知らせ） |
 | `ChargeRelease`     | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（プレイヤー→サーバーへの、R2を離した合図。ゲージの経過秒数を付ける） |
@@ -275,10 +279,23 @@ distance = power² × sin(2θ) / workspace.Gravity
 - 溜めはスキルではなくコア機能として実装済み。最初から3段階（0.5秒で1.2倍、1.0秒で1.3倍、1.5秒で1.5倍）あり、段階と倍率は `CombatConfig.Charge.Stages` で変えられる。行を足せば段階が増える（段階追加スキルの土台）
 - R2を押す（`Tool.Activated`）と溜め開始、離すと振る。押した合図はサーバーで直接受け取る。離した合図は、タイミングゲージの経過秒数を付けるため、プレイヤー側が `Remotes.ChargeRelease` で送る（`Tool.Deactivated` と RemoteEvent はサーバーに届く順番が保証されないので、離した合図は RemoteEvent だけにしている）
 - 溜めの秒数はサーバーが `os.clock()` の差分で測り、プレイヤー側からは受け取らない。最大段階に達したら離すまでその段階を保つ
-- 溜め中は歩く速さが落ちる（`CombatConfig.Charge.WalkSpeedMultiplier`）
+- 溜め中は歩く速さが落ちる（`CombatConfig.Charge.WalkSpeedMultiplier`）。速さを変えるのは `MovementSpeed` で、Bat の Script は溜め中であることをキャラクターの属性 `Charging` に書くだけ（走る仕組みと値を上書きし合わないため）
 - 溜め中は頭の後ろまで振りかぶる構えのアニメーションを再生する（`CombatConfig.Charge.AnimationId`）。自作してゲーム所有者のアカウントで公開したもの。動かすのは上半身だけなので、溜め中に歩いても脚は歩く動きのまま。ゲームをグループ所有に移す場合は、グループで公開し直してIDを差し替える必要がある
 - 段階は演出として、体の光（Highlight）、周囲の照明（PointLight）、段階が上がった瞬間の粒（ParticleEmitter）、コントローラーの振動で示す
 - 溜め速度スキルは「秒数」ではなく「溜まる速さ（rate）」に作用させる
+
+### 走る（シングルモードだけ）
+
+武器集め・経験値集め・飛距離勝負などのシングルモードでは走れる。対戦モードでは走れない（走れると相手に当てにくいため）。決めたことはすべてユーザーの判断（2026-10-10）。値は `CombatConfig.Sprint`
+
+- 速さ：歩く速さ16の **1.5倍（24）**（`SpeedMultiplier`）。溜め中は走っていても溜めの速さ（16×0.5＝8）にする
+- 操作
+  - キーボード：**左 Ctrl** を押している間だけ走る（Minecraft と同じキー。Shift は Roblox 標準のシフトロックと重なるので使わない）
+  - コントローラー：**L3**（左スティックの押し込み）を押すたびに走る／歩くを切り替える（スティックを押し込み続けるのは指が疲れるため）
+  - スマホ・タブレット：画面の「RUN」ボタンを押すたびに切り替える（押し続ける形だと右手の親指がふさがって振れないため）。ジャンプボタンの左隣に、ジャンプボタンの0.8倍の大きさで置き、走っている間は青くする。**実機・エミュレーターでの見え方はまだ確かめていない**
+- 走れるかどうか：サーバーがプレイヤーの属性 `CanSprint` で決める。シングルモードと対戦モードを分ける仕組みがまだないので、今は全員に付けている。対戦モードを作るときは、試合中だけ `CanSprint` を false にする（走っている途中でも歩きに戻る）。プレイヤー側は `CanSprint` があるときだけ操作を受け付け、ボタンを出す
+- 仕組み：プレイヤー側（`SprintButton`）が `Remotes.SprintInput` で走る／歩くを送り、サーバー（`SprintService`）がキャラクターの属性 `Sprinting` に書いて `MovementSpeed` で速さを変える。歩く速さを変えるのは `MovementSpeed` だけにする。サーバーを通すので、押してから速くなるまでに通信の分だけ遅れる
+- リスポーンすると歩きに戻る（`Sprinting` はキャラクターの属性のため）
 
 ### タイミングゲージ
 

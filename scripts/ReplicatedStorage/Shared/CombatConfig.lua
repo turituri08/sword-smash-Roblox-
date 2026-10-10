@@ -160,6 +160,18 @@ CombatConfig.Charge = {
 	AnimationFadeTime = 0.2, -- 構えの姿勢へ移るまでの秒数（なめらかに振りかぶる）
 }
 
+-- 走る。走れるのはシングルプレイだけ（対戦で走れると相手に当てにくいため）。走れるかはサーバーがプレイヤーの属性 CanSprint で決める
+CombatConfig.Sprint = {
+	SpeedMultiplier = 1.5, -- 走る速さ（StarterPlayer の歩く速さ16に掛ける）。溜め中は溜めの速さ（Charge.WalkSpeedMultiplier）を優先する
+	-- スマホ・タブレットの走るボタン。右下のジャンプボタンの左隣に置く。大きさはピクセル
+	Button = {
+		TouchScale = 0.8, -- ジャンプボタンに対する大きさ
+		TouchGap = 12,    -- ジャンプボタンとの間
+		IdleColor = Color3.fromRGB(20, 20, 20),
+		ActiveColor = Color3.fromRGB(60, 170, 255), -- 走っている間のボタンの色
+	},
+}
+
 -- 溜め切った後のタイミングゲージ。最大段階に達すると、キャラクターの横に上下へ往復するゲージが出る（叩く本人にだけ見える）。
 -- 上の端（緑）で離すと極大、そのさらに端（虹）で離すと決めの一瞬を出す最大の吹っ飛ばし、下の端（赤）で離すとミス、その間は普通の吹っ飛ばし。時間切れはない
 local GAUGE_GREEN = Color3.fromRGB(60, 255, 110)
