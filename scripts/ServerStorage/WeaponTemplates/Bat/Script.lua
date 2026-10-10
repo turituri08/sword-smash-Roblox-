@@ -1,5 +1,5 @@
 -- Studio配置: ServerStorage > WeaponTemplates > Bat (Tool) > Script（通常のScript。サーバー側で実行される）
--- バットのひな形。WeaponService がこれを武器ごとに複製して持ち物に入れ、持ち物に入った時点で動き出す。
+-- バットのひな形。WeaponInventory がこれを武器ごとに複製して持ち物に入れ、持ち物に入った時点で動き出す。
 -- 強さと角度は、複製に付けた属性 WeaponId から引く（Weapons.fromTool）
 -- 役割: バットのエントリポイント。R2を押す（溜め開始）・離す（振る）・当たりを受けて各モジュールを呼び、
 --       溜め中などのプレイヤーごとの状態を持つ。仕様書の SwordService に相当する処理が
@@ -25,6 +25,7 @@ local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
 local CriticalMeter = require(ServerScriptService.CriticalMeter)
 local MovementSpeed = require(ServerScriptService.MovementSpeed)
+local TreasureChests = require(ServerScriptService.TreasureChests)
 
 local tool = script.Parent
 local weapon = Weapons.fromTool(tool)
@@ -105,7 +106,7 @@ local function stopCharge()
 	return stage, elapsed
 end
 
--- 飛距離を叩いたプレイヤーに知らせ、ベスト記録を更新する。
+-- 飛距離を叩いたプレイヤーに知らせ、ベスト記録を更新し、宝箱を落とす。
 -- 飛ばした対象と向きも送り、プレイヤー側の小画面がそれを追いかける。
 -- ベストはプレイヤーの属性に持たせる（プレイヤー側へ自動で同期され、画面表示はこれを読む）。
 -- DataStoreに保存するようになったら PlayerData.recordDistance に置き換える
@@ -118,6 +119,8 @@ local function reportDistance(attacker, target, direction, distance, flightTime)
 		player:SetAttribute("BestDistance", distance)
 	end
 	distanceResultEvent:FireClient(player, distance, flightTime, isNewBest, target, direction)
+	-- 50 m の倍数の線を初めて超えたら、線ごとに宝箱を1つ、相手が着地したころに落とす
+	TreasureChests.dropForDistance(player, distance, flightTime)
 end
 
 -- Hitboxに触れたパーツを判定し、Humanoidを持つキャラクターなら吹き飛ばす

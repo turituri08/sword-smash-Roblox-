@@ -127,7 +127,15 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `CriticalButton`    | StarterGui/CriticalHud   | LocalScript  | 作成済み（画面右下の会心のゲージと発動ボタン。L1・E・タップで発動を頼む） |
 | `SprintInput`       | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（プレイヤー→サーバーへの、走る／歩くの合図。true か false を送る） |
 | `MovementSpeed`     | ServerScriptService      | ModuleScript | 作成済み（歩く速さを、溜め中か・走っているかから決める。歩く速さを変えるのはここだけ） |
-| `WeaponService`     | ServerScriptService      | Script       | 作成済み（キャラクターが出るたびに、バットのひな形を武器ごとに複製して持ち物に入れる） |
+| `WeaponService`     | ServerScriptService      | Script       | 作成済み（最初の武器を持たせ、キャラクターが出るたびに持っている武器を持ち物に入れる） |
+| `WeaponInventory`   | ServerScriptService      | ModuleScript | 作成済み（持っている武器の確認と追加。バットのひな形を武器ごとに複製して持ち物に入れる） |
+| `ChestLoot`         | ReplicatedStorage/Shared | ModuleScript | 作成済み（飛距離から宝箱の数と格を決め、格の確率で武器を引く。計算だけ） |
+| `ChestBuilder`      | ServerScriptService      | ModuleScript | 作成済み（宝箱の見た目を部品で組み立てる。ふたの開き具合を変える） |
+| `TreasureChests`    | ServerScriptService      | ModuleScript | 作成済み（宝箱を落とし、本人が開けたら武器を引いて渡す） |
+| `ChestService`      | ServerScriptService      | Script       | 作成済み（宝箱のフォルダを用意し、開ける合図を受ける。抜けた人の宝箱を片付ける） |
+| `ChestReward`       | StarterGui/ChestHud      | LocalScript  | 作成済み（空が光る・着地の揺れ・当たったものの表示。ほかの人の宝箱の開けるボタンを隠す） |
+| `ChestDropped`      | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→本人への、宝箱が落ち始めた知らせ。着地の場所と秒数） |
+| `ChestOpened`       | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→本人への、宝箱から出た武器の知らせ。武器の Id と初めてか） |
 | `SprintService`     | ServerScriptService      | Script       | 作成済み（走れる印 CanSprint を付け、走る合図を受けて歩く速さを変える） |
 | `SprintButton`      | StarterGui/SprintHud     | LocalScript  | 作成済み（左 Ctrl・L3・画面のボタンで走る合図を送る） |
 | `DistanceResult`    | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いたプレイヤーへの通知のみ） |
@@ -162,7 +170,7 @@ git管理用の写し（`scripts/`）は、**Studio上の場所をそのまま�
 ```
 scripts/
   ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua, HitEffects.lua, HitText.lua など
-  ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua, Ragdoll.lua
+  ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua, Ragdoll.lua, TreasureChests.lua など
   ServerStorage/WeaponTemplates/Bat/   Script.lua, LocalScript.lua（バットのひな形）
   StarterGui/DistanceHud/     DistanceDisplay.lua, TargetCamera.lua
   StarterPlayer/StarterPlayerScripts/   HitEffectReceiver.lua
@@ -172,8 +180,8 @@ scripts/
 
 - Tool の中に `Handle`（剣の見た目）
 - 刃の位置に `Hitbox` という名前のPart：`CanCollide = false`、`Transparency = 1`、`Massless = true`、Handleに溶接
-- Tool の Attribute に `WeaponId`（文字列、`CombatConfig.Weapons` の `Id`）。`WeaponService` が複製するときに付ける
-- Tool のひな形は ServerStorage/WeaponTemplates に置き、`WeaponService` が武器ごとに複製して持ち物に入れる（StarterPack には置かない）
+- Tool の Attribute に `WeaponId`（文字列、`CombatConfig.Weapons` の `Id`）。`WeaponInventory` が複製するときに付ける
+- Tool のひな形は ServerStorage/WeaponTemplates に置き、`WeaponInventory` が武器ごとに複製して持ち物に入れる（StarterPack には置かない）
 
 ### 未接続の箇所
 
@@ -318,16 +326,44 @@ distance = power² × sin(2θ) / workspace.Gravity
 - 持ち替え：Roblox 標準の持ち物欄（ホットバー）を使う。キーボードは数字キー（1〜5）、コントローラーは L1（前）・R1（次）、スマホ・タブレットはタップ。一覧の画面は自分で作らない
   - L1 は会心の発動と重なる。会心が満タンのときだけ発動し、それ以外のときは素通しして標準の持ち替えに渡す（`CriticalButton` は満タンでなければ `Pass` を返す）。Studio で、満タンでなければ持ち替わり、満タンなら発動して持ち替わらないことを確かめた
   - 持ち物欄には絵ではなく名前を出す（どれも同じバットの絵だと見分けられないため）
-- 作り：バットのひな形（`ServerStorage/WeaponTemplates/Bat`。Script・LocalScript 入り）を1本だけ置き、キャラクターが出るたびに `WeaponService` が武器ごとに複製して持ち物（Backpack）に入れる。スクリプトの元を1つにまとめるため、武器ごとの道具を Studio に並べて置かない
+- 作り：バットのひな形（`ServerStorage/WeaponTemplates/Bat`。Script・LocalScript 入り）を1本だけ置き、キャラクターが出るたびに、持っている武器だけを `WeaponService`（`WeaponInventory.fillBackpack`）が複製して持ち物（Backpack）に入れる。スクリプトの元を1つにまとめるため、武器ごとの道具を Studio に並べて置かない
   - 複製には属性 `WeaponId` を付ける。バットの Script・LocalScript は、持ち物に入った時点で動き出し、`Weapons.fromTool` で自分の強さ・角度を引く（`Knockback.resolve` に渡す）
   - 角度は、当たった場所の火花・衝撃波の向きにも使う（`HitEffects.play` の `launchAngle`。他のプレイヤーへは `Remotes.HitEffect` に付けて送る）
-- 当面は全員が全部のバットを持つ（仮。宝箱を作るときに、持っている武器だけを配るようにする）。持っている武器は PlayerData を作るまでは保存しない
+- 最初に持っているのは木のバットだけ（`Starter = true`）。ほかは宝箱から手に入る（「宝箱」の節）。持っている武器はプレイヤーの属性（`Owns_<武器の Id>`）に持たせ、リスポーンしても残る。PlayerData を作るまでは保存しない（ゲームを抜けると消える）
 - 見た目：木は元の木目のまま。ほかは木目（`Mesh.TextureId`）を外して、部品の色で見せる
   - 木目を外した部品は、空の光（Lighting の `EnvironmentDiffuseScale` 1）で青っぽく見える。最初の色では鉄が紺、銅がピンクに見えたので、色を暖かいほうへ寄せた
   - 素材（Metal・Foil・SmoothPlastic）は、今のバットの作り（SpecialMesh）では見た目がほとんど変わらなかった
   - 大きさ（`Mesh.Scale`）も変えられるが、真ん中を基準に伸びて持つ位置がずれ、当たり判定（`Hitbox`）も別の部品なので、今は変えていない
 - 気を付けること：持ち替えると、振った後のクールダウン（0.4秒）は別のバットには引き継がれない（クールダウンはバットごとのスクリプトが持つため）。持ち替えにも時間がかかるので今は問題にしていない。対戦で問題になったら、クールダウンをキャラクターの属性に持たせる
 - 後で足すもの：武器ごとの固有スキル（InnateSkills）、リーチ・クールダウンの違い、武器ごとの振りのアニメーション、レベルアップ、レア度ごとの見た目（光り方など）
+
+### 宝箱
+
+飛距離のごほうび。値は `CombatConfig.Chests`（格と確率）・`Rarities`（レア度の並びと色）・`Weapons`（中身）。決めたことはすべてユーザーの判断（2026-10-10）
+
+- 出る数：飛距離が **50 m の倍数の線を初めて超えたとき、線ごとに1つ**（`DistanceStep`）。**同じ線では1回だけ**で、50 m でもらったら次は100 m を超えたとき。いきなり120 m なら50 m と100 m の2つ（`ChestLoot.getNewLines`）。もらった一番遠い線はプレイヤーの属性 `ChestLineReached` に持たせる（PlayerData を作ったら保存する。今はゲームを抜けると数え直し）
+  - 調整の経緯：最初は50 m を超えるたびに毎回出していたが、同じ線では1回だけにした（ユーザーの判断）。今いちばん遠くまで飛ぶのは約320 m なので、300 m の線までもらうと、それ以上は出ない
+- 格：超えた線ごとに格が上がる。120 m なら50 m の箱と100 m の箱が1つずつ。行は `Tiers` に書き、MinDistance 以上の行のうち一番下の行を使う（200 m 以上はすべて虹の箱）
+
+  | 宝箱 | 縁取りの色 | コモン | アンコモン | レア |
+  | ---- | ---------- | ------ | ---------- | ---- |
+  | 50 m | 銅 | 80% | 20% | — |
+  | 100 m | 銀 | 60% | 35% | 5%（ここからレアが出る） |
+  | 150 m | 金 | 45% | 40% | 15% |
+  | 200 m 以上 | 虹 | 30% | 45% | 25% |
+
+  - 数値は仮。課金と関わる大事な部分なので、本番の値は後でしっかり検討する（ユーザーの判断）
+  - 中身：最初から持っている武器（木）は出ない。レア度を選んでから、そのレア度の武器を同じ確率で選ぶ（今はコモン＝鉄、アンコモン＝銅か銀、レア＝金）。Studio でそれぞれ1万回引いて、表どおりの割合になることを確かめた
+  - 調整しやすくする作り：武器を `Weapons` に足せば、自動で宝箱の中身に入る。その格に出る武器がまだないレア度は飛ばし、残りの重みで割り直す。新しいレア度（エピック・レジェンド）は、`Rarities` に色が入れてあるので、出したい格の `Odds` に重みを書くだけで出るようになる。格は `Tiers` に行を足すだけで増える
+  - 今いちばん遠くまで飛ぶのは、金のバットで会心と虹が重なったときの約320 m（宝箱6つ）
+- 現れ方：飛ばした相手が着地して飛距離の数字が止まってから（`DropDelay`）、叩いた人の周り7〜11 stud（`DropDistance`）の空から落ちてくる。2つ以上なら0.5秒ずつずらし（`Interval`）、向きを均等にずらして散らす（最初は向きを箱ごとにばらばらに決めていて、重なって落ちることがあった）
+  - 演出：画面が一瞬明るくなって空が光り（本人の画面だけ、ColorCorrection）、格の色の光の柱が降りる → 0.35秒後に宝箱が80 stud 上からだんだん速く落ちる（0.55秒）→ 着地で土ぼこりが舞い、カメラが少し揺れる（本人だけ）。光の柱は着地後に消える
+  - 案の経緯：着地点に出す案は「遠くへ飛ばすと取りに行くのが面倒」、すぐ横にパッと出す案は「なんとなく違う」となり、空から落ちてくる形にした。マップに置いてある宝箱は今回は作らない（マップができてから考える）
+- 開ける：近づいて **F を0.8秒長押し**（コントローラーは **X**、スマホ・タブレットはタップを長押し。`PromptHoldDuration`）。最初は押してすぐ開いていたが、長押しにした（ユーザーの判断）。ProximityPrompt（E は会心に使っているので変えた）。開けられるのは飛ばした本人だけ（ほかの人の画面では開けるボタンを出さない。宝箱そのものは全員に見える）
+  - ふたが後ろへ開き（0.35秒）、開ききったら画面の上のほうに、レア度（色付き）と武器の名前を出す。持っていなかった武器なら **NEW!** を添えて、すぐ持ち物欄に入る。持っていた武器なら NEW! を出さない（「もう持っている」とは出さない）。1.5秒後に宝箱は消える
+  - 開けないままの宝箱は消えない（50 m の倍数でしか出ないので、地面が宝箱だらけにはならない見込み）。本人がゲームを抜けたら片付ける
+- 作り：宝箱の情報はモデルの属性（`OwnerUserId`・`Tier`・`Opened`）に持たせ、モジュールは状態を持たない。見た目は `ChestBuilder` が部品で組み立てる（木の箱に格の色の縁取りと光る錠前。虹の箱は縁取りを6色で順に塗る）。すべて固定の部品で、落下とふたの動きは毎フレーム `PivotTo` で置き直す
+- 後で：手に入れた武器と `ChestLineReached` の保存（DataStore）、宝箱のデザインを選ぶ（Creator Store の模型から候補を並べる。遠くの線ほどレアでリッチな見た目にしたい。ユーザーの希望）、出たアイテムの絵（バットは ViewportFrame で3Dの模型を映せば画像が要らない）、パック、宝箱の奪い合い、確率の本番の値、確率をプレイヤーに見せる画面
 
 ### タイミングゲージ
 
@@ -473,6 +509,18 @@ distance = power² × sin(2θ) / workspace.Gravity
 
 ### DataStoreスキーマ（PlayerProfile_v1）
 
+**保存を作る時期と、今セッション中だけ持っている値**（ユーザーの判断、2026-10-10）：保存は、経験値とスキルを入れるときに一緒に作る。それまでは、下の値はプレイヤーの属性にだけ持たせていて、ゲームを抜けると消える。保存を作るときに、これらを忘れずにスキーマへ入れる
+
+| 保存するもの | 今の持ち方（プレイヤーの属性） | 書いている場所 | スキーマでの持ち方（案） |
+| ------------ | ------------------------------ | -------------- | ------------------------ |
+| 持っている武器 | `Owns_<武器の Id>` = true（例 `Owns_GoldBat`） | `WeaponInventory` | `weapons = { [weaponId] = true }`（将来レベルを持たせるなら数値に） |
+| ベスト飛距離 | `BestDistance` | バットの Script（`reportDistance`） | `records.bestDistance` |
+| 宝箱をもらった一番遠い線 | `ChestLineReached`（50 m 単位） | `TreasureChests` | `records.chestLineReached` |
+| 経験値・スキル（これから作る） | — | — | `exp`・`skillPoints`・`skills` |
+
+- 下のスキーマの `swords`・`equippedSword` は剣を想定した古い案。武器はバットにしたので、保存を作るときに `weapons` に置き換える
+- 会心のゲージ（`CriticalCharge`・`CriticalActive`）は、今は保存しない予定（対戦モードでの扱いと合わせて決める）
+
 ```lua
 {
   schema = 1,
@@ -559,7 +607,7 @@ distance = power² × sin(2θ) / workspace.Gravity
 **会心の一撃の別の案** 以前の案（会心の一撃は「会心の一撃」の節で実装済み）
 - 以前の案（バットの先端・中間・根元で吹っ飛び率を変える、会心のときは激しい回転・頭から地面に刺さる・空の彼方で星になるなどの派手な吹っ飛び方）も、会心の一撃の演出や別の倍率の候補として残す
 
-**宝箱とパック** ユーザーのアイデア（2026-10-06）。武器の仕組み（「武器（バット）」の節で実装済み）の次に作る（ユーザーの判断）
+**宝箱とパック** ユーザーのアイデア（2026-10-06）。宝箱は「宝箱」の節で実装済み（飛距離のごほうびで、パックは挟まない）。ここはパックと今後の案
 - 宝箱で決めたこと（2026-10-06、ユーザーの判断）：手に入れ方は「マップに置いてあり、近づいて開ける（開けると消え、時間がたつとまた出る）」と「一定の飛距離を超えたごほうび」の両方。最初はパックを挟まず、開けるとアイテムが1つ当たるだけでよい。当たったアイテムは、PlayerData を作るまでは保存しない（ゲームを抜けると消える）。開ける操作は ProximityPrompt にする予定（キーボード・コントローラー・タップに自動で対応する。E は会心の発動に使っているので別のキーにする）
 - 宝箱を手に入れられる。宝箱からはパックが出てくる。パックにはそれぞれレア度がある
 - パックを開けるとカードが出てくる。カードは武器、またはペット（Roblox の「Steal a Brainrot」のようなもの）。出てきたカードから1枚を選んでもらえる

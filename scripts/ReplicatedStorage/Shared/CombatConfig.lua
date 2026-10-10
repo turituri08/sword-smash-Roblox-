@@ -104,9 +104,10 @@ CombatConfig.HitFeedback = {
 -- Appearance は見た目。なければ元のバットの木目のまま。あれば木目を外して部品の色と素材で見せる。
 -- 木目を外した部品は空の光（Lighting の EnvironmentDiffuseScale）で青っぽく見えるので、色は暖かいほうへ寄せてある。
 -- 素材（Material）は、今のバットの作り（SpecialMesh）では見た目がほとんど変わらなかった
+-- Starter = true の武器は最初から持っている（宝箱からは出ない）。それ以外は宝箱から出る（Rarity で出やすさが決まる）。
 -- レア度はバットでは最大レアまで。レジェンドなどは剣などを増やすときに使う（ユーザーの判断）
 CombatConfig.Weapons = {
-	{ Id = "WoodBat", Name = "Wood", Template = "Bat", Rarity = "Common", BasePower = 64, Angle = 38.7 }, -- 溜めなしで約20 m
+	{ Id = "WoodBat", Name = "Wood", Template = "Bat", Rarity = "Common", BasePower = 64, Angle = 38.7, Starter = true }, -- 溜めなしで約20 m
 	{ Id = "IronBat", Name = "Iron", Template = "Bat", Rarity = "Common", BasePower = 67, Angle = 35,
 		Appearance = { Color = Color3.fromRGB(90, 82, 72), Material = Enum.Material.Metal } },
 	{ Id = "CopperBat", Name = "Copper", Template = "Bat", Rarity = "Uncommon", BasePower = 70, Angle = 40,
@@ -115,6 +116,64 @@ CombatConfig.Weapons = {
 		Appearance = { Color = Color3.fromRGB(205, 198, 175), Material = Enum.Material.Metal } },
 	{ Id = "GoldBat", Name = "Gold", Template = "Bat", Rarity = "Rare", BasePower = 78, Angle = 42,
 		Appearance = { Color = Color3.fromRGB(255, 175, 0), Material = Enum.Material.Foil } },
+}
+
+-- レア度。低い順に並べる。Name と Color は宝箱から出たときの表示に使う。
+-- まだその武器がないレア度（エピック・レジェンド）も、色だけ先に決めておく
+CombatConfig.Rarities = {
+	{ Id = "Common", Name = "COMMON", Color = Color3.fromRGB(210, 210, 210) },
+	{ Id = "Uncommon", Name = "UNCOMMON", Color = Color3.fromRGB(90, 220, 90) },
+	{ Id = "Rare", Name = "RARE", Color = Color3.fromRGB(70, 150, 255) },
+	{ Id = "Epic", Name = "EPIC", Color = Color3.fromRGB(180, 90, 255) },
+	{ Id = "Legendary", Name = "LEGENDARY", Color = Color3.fromRGB(255, 170, 30) },
+}
+
+-- 宝箱。飛距離が DistanceStep の倍数の線を初めて超えたら、線ごとに1つ、叩いた人の近くの空から落ちてくる。
+-- 同じ線では1回しか出ない（50 m でもらったら、次は100 m を超えたとき。いきなり120 m なら50 m と100 m の2つ）。
+-- 開けられるのは飛ばした本人だけ。開けないままでも消えない（本人がゲームを抜けたら片付ける）
+CombatConfig.Chests = {
+	DistanceStep = 50,
+	-- 格。超えた線（50 m、100 m…）が MinDistance 以上の行のうち、一番下の行を使う。行を足せば格が増える。
+	-- Odds はレア度ごとの重み（合計が100でなくてもよい）。書いていないレア度は出ない。
+	-- その時点で宝箱から出る武器がないレア度は飛ばし、残りの重みで割り直す（ChestLoot.roll）。
+	-- 新しいレア度の武器を足したら、出したい格の Odds に書き足すだけでよい。数値は仮（課金と関わるので、本番の値は後で検討する）
+	Tiers = {
+		{ MinDistance = 50, Name = "Bronze", Color = Color3.fromRGB(205, 120, 60), Odds = { Common = 80, Uncommon = 20 } },
+		{ MinDistance = 100, Name = "Silver", Color = Color3.fromRGB(215, 220, 230), Odds = { Common = 60, Uncommon = 35, Rare = 5 } },
+		{ MinDistance = 150, Name = "Gold", Color = Color3.fromRGB(255, 190, 30), Odds = { Common = 45, Uncommon = 40, Rare = 15 } },
+		-- TrimColors があれば、縁取りをこの色で順に塗る（虹色の箱）
+		{ MinDistance = 200, Name = "Rainbow", Color = Color3.fromRGB(255, 120, 220), Odds = { Common = 30, Uncommon = 45, Rare = 25 },
+			TrimColors = {
+				Color3.fromRGB(255, 70, 70), Color3.fromRGB(255, 170, 40), Color3.fromRGB(255, 240, 60),
+				Color3.fromRGB(80, 230, 90), Color3.fromRGB(70, 170, 255), Color3.fromRGB(170, 90, 255),
+			} },
+	},
+	-- 落ちてくる演出
+	DropDelay = 0.3,           -- 飛ばした相手が着地してから（飛距離の数字が止まってから）、最初の宝箱が落ち始めるまでの秒数
+	Interval = 0.5,            -- 宝箱が2つ以上のとき、次の宝箱が落ち始めるまでの秒数
+	DropDistance = { 7, 11 },  -- 叩いた人から、落ちる場所までの距離（stud）。この範囲でばらつかせる
+	DropHeight = 80,           -- 落ち始める高さ（地面から、stud）
+	PillarTime = 0.35,         -- 光の柱が降りてから、宝箱が落ち始めるまでの秒数
+	FallTime = 0.55,           -- 落ちきるまでの秒数（だんだん速くなる）
+	PillarWidth = 5,           -- 光の柱の太さ（stud）
+	PillarFadeTime = 0.6,      -- 着地してから光の柱が消えるまでの秒数
+	DustCount = 40,            -- 着地で舞う土ぼこりの粒の数
+	-- 叩いた本人の画面の演出
+	SkyFlash = 0.35,           -- 光の柱が降りるとき、画面を明るくする強さ（ColorCorrection の Brightness）
+	SkyFlashTime = 0.5,        -- 明るさが戻るまでの秒数
+	LandShakeAngle = 0.8,      -- 着地したときのカメラの揺れ（度）
+	LandShakeTime = 0.3,       -- 揺れが収まるまでの秒数
+	-- 開ける
+	PromptKey = Enum.KeyCode.F,            -- キーボード（E は会心の発動に使っている）
+	PromptGamepadKey = Enum.KeyCode.ButtonX,
+	PromptDistance = 10,       -- 開けられる距離（stud）
+	PromptHoldDuration = 0.8,  -- 開けるボタンを長押しする秒数
+	LidOpenTime = 0.35,        -- ふたが開ききるまでの秒数
+	LidOpenAngle = 110,        -- ふたが開く角度（度）
+	RemoveDelay = 1.5,         -- 開けてから宝箱が消えるまでの秒数
+	-- 当たったものの表示（画面の上のほう）
+	RewardShowTime = 2.5,      -- 表示しておく秒数
+	NewColor = Color3.fromRGB(255, 230, 60), -- NEW! の色
 }
 
 -- 吹っ飛ばし。打ち出す速さと角度は武器ごと（CombatConfig.Weapons）

@@ -1,6 +1,6 @@
 -- Studio配置: ReplicatedStorage > Shared > Weapons（ModuleScript）
--- 役割: 武器の定義（CombatConfig.Weapons）を引く。値を持たず、引くだけ。
---       武器の道具（Tool）には、サーバー（WeaponService）が作るときに属性 WeaponId を付けてある。
+-- 役割: 武器とレア度の定義（CombatConfig.Weapons・Rarities）を引く。値を持たず、引くだけ。
+--       武器の道具（Tool）には、サーバー（WeaponInventory）が作るときに属性 WeaponId を付けてある。
 --       サーバーとプレイヤー側の両方から、持っている道具がどの武器かを調べるのに使う
 
 local CombatConfig = require(script.Parent:WaitForChild("CombatConfig"))
@@ -23,6 +23,16 @@ end
 
 function Weapons.fromTool(tool)
 	return Weapons.get(tool:GetAttribute("WeaponId"))
+end
+
+-- レア度の定義（CombatConfig.Rarities の1行）
+function Weapons.getRarity(rarityId)
+	for _, rarity in ipairs(CombatConfig.Rarities) do
+		if rarity.Id == rarityId then
+			return rarity
+		end
+	end
+	return nil
 end
 
 return Weapons
