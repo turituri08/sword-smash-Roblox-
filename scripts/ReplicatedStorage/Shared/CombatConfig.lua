@@ -98,10 +98,27 @@ CombatConfig.HitFeedback = {
 	},
 }
 
--- 吹っ飛ばし。溜めの倍率は BasePower にかかる（飛距離は power の2乗に比例する）
+-- 武器。並び順のまま持ち物欄（ホットバー）に並ぶ。
+-- BasePower は打ち出す速さ（stud/秒）で、溜めなどの倍率はこれにかかる（飛距離は power の2乗に比例する）。
+-- Angle は打ち出す角度（度、水平が0）。45で最も遠くへ飛び、低いと低い弾道、高いと高い弾道になる。
+-- Appearance は見た目。なければ元のバットの木目のまま。あれば木目を外して部品の色と素材で見せる。
+-- 木目を外した部品は空の光（Lighting の EnvironmentDiffuseScale）で青っぽく見えるので、色は暖かいほうへ寄せてある。
+-- 素材（Material）は、今のバットの作り（SpecialMesh）では見た目がほとんど変わらなかった
+-- レア度はバットでは最大レアまで。レジェンドなどは剣などを増やすときに使う（ユーザーの判断）
+CombatConfig.Weapons = {
+	{ Id = "WoodBat", Name = "Wood", Template = "Bat", Rarity = "Common", BasePower = 64, Angle = 38.7 }, -- 溜めなしで約20 m
+	{ Id = "IronBat", Name = "Iron", Template = "Bat", Rarity = "Common", BasePower = 67, Angle = 35,
+		Appearance = { Color = Color3.fromRGB(90, 82, 72), Material = Enum.Material.Metal } },
+	{ Id = "CopperBat", Name = "Copper", Template = "Bat", Rarity = "Uncommon", BasePower = 70, Angle = 40,
+		Appearance = { Color = Color3.fromRGB(205, 100, 40), Material = Enum.Material.Metal } },
+	{ Id = "SilverBat", Name = "Silver", Template = "Bat", Rarity = "Uncommon", BasePower = 74, Angle = 37,
+		Appearance = { Color = Color3.fromRGB(205, 198, 175), Material = Enum.Material.Metal } },
+	{ Id = "GoldBat", Name = "Gold", Template = "Bat", Rarity = "Rare", BasePower = 78, Angle = 42,
+		Appearance = { Color = Color3.fromRGB(255, 175, 0), Material = Enum.Material.Foil } },
+}
+
+-- 吹っ飛ばし。打ち出す速さと角度は武器ごと（CombatConfig.Weapons）
 CombatConfig.Launch = {
-	BasePower = 64,           -- 打ち出す速さ（stud/秒）。溜めなしで約20 stud飛ぶ
-	Angle = 38.7,             -- 打ち出す角度（度、水平が0）。45で最も遠くへ飛ぶ
 	MaxPower = 1000,          -- power の上限。大きくしておけば実質無効
 	LandingCheckDistance = 4, -- HumanoidRootPartの下、この距離以内に地面があれば着地直前とみなす
 	MaxAirTime = 10,          -- 奈落に落ちた場合などに備えた、着地待ちの上限秒数

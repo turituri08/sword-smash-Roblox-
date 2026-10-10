@@ -1,4 +1,5 @@
--- Studio配置: StarterPack > Bat (Tool) > LocalScript（プレイヤー側で実行される）
+-- Studio配置: ServerStorage > WeaponTemplates > Bat (Tool) > LocalScript（プレイヤー側で実行される）
+-- バットのひな形。WeaponService が武器ごとに複製して持ち物に入れる（ServerStorage はプレイヤー側に届かないので、ここでは動かない）
 -- 役割: 溜めの構えと振りのアニメーション再生と、溜めの段階が上がったときのコントローラーの振動。
 --       溜め切った後のタイミングゲージを出し、離したら経過秒数を付けてサーバーへ知らせる（Remotes.ChargeRelease）。
 --       当たったときに振りをゆっくりにして、相手に引っかかる重さを出す。当たった瞬間のカメラの揺れと振動、当たった場所の星・衝撃波・火花、相手の震えもここで出す。
@@ -22,8 +23,10 @@ local TimingGauge = require(Shared:WaitForChild("TimingGauge"))
 local TimingGaugeDisplay = require(Shared:WaitForChild("TimingGaugeDisplay"))
 local FinishCinematic = require(Shared:WaitForChild("FinishCinematic"))
 local HitText = require(Shared:WaitForChild("HitText"))
+local Weapons = require(Shared:WaitForChild("Weapons"))
 
 local tool = script.Parent
+local weapon = Weapons.fromTool(tool)
 local hitbox = tool:WaitForChild("Hitbox")
 local chargeReleaseEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ChargeRelease")
 
@@ -251,7 +254,7 @@ local function predictHit(hitPart)
 	if ChargeStages.hasHitEffects(swingStage, swingCritical) then
 		shakeCamera(feedback)
 		local direction = Knockback.getDirection(character.HumanoidRootPart, targetRoot)
-		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage, swingGaugeResult, swingCritical)
+		HitEffects.play(HitEffects.getContactPoint(hitPart, hitbox.Position), direction, swingStage, swingGaugeResult, swingCritical, weapon.Angle)
 		TargetShake.play(target, direction, swingStage, swingGaugeResult, swingCritical)
 		-- 引っかかりの間ずっと振動させ、振り抜きと同時に止めて、重さが抜ける感じを出す
 		-- （引っかかりのない溜めない振りの会心でも、短く振動させる）

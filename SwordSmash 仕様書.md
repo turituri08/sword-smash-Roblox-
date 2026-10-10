@@ -113,6 +113,7 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `CombatConfig`      | ReplicatedStorage/Shared | ModuleScript | 作成済み（振り・当たった瞬間の手応え・吹っ飛ばし・溜め・飛距離表示の値） |
 | `ChargeStages`      | ReplicatedStorage/Shared | ModuleScript | 作成済み                               |
 | `Knockback`         | ReplicatedStorage/Shared | ModuleScript | 作成済み（スキル補正・蓄積ダメージは未対応） |
+| `Weapons`           | ReplicatedStorage/Shared | ModuleScript | 作成済み（武器の定義を引く。道具の属性 WeaponId から武器を調べる） |
 | `HitEffects`        | ReplicatedStorage/Shared | ModuleScript | 作成済み（当たった場所のトゲの星・衝撃波の輪・火花。演出はプレイヤー側で作る） |
 | `TargetShake`       | ReplicatedStorage/Shared | ModuleScript | 作成済み（当たってから飛ぶまで、叩かれた相手を震わせる。プレイヤー側で揺らす） |
 | `TimingGauge`       | ReplicatedStorage/Shared | ModuleScript | 作成済み（タイミングゲージの位置・結果・倍率の計算と、プレイヤー側の秒数の補正） |
@@ -126,6 +127,7 @@ CPUの蓄積ダメージは常に0とし、一撃の飛距離を競う形にす�
 | `CriticalButton`    | StarterGui/CriticalHud   | LocalScript  | 作成済み（画面右下の会心のゲージと発動ボタン。L1・E・タップで発動を頼む） |
 | `SprintInput`       | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（プレイヤー→サーバーへの、走る／歩くの合図。true か false を送る） |
 | `MovementSpeed`     | ServerScriptService      | ModuleScript | 作成済み（歩く速さを、溜め中か・走っているかから決める。歩く速さを変えるのはここだけ） |
+| `WeaponService`     | ServerScriptService      | Script       | 作成済み（キャラクターが出るたびに、バットのひな形を武器ごとに複製して持ち物に入れる） |
 | `SprintService`     | ServerScriptService      | Script       | 作成済み（走れる印 CanSprint を付け、走る合図を受けて歩く速さを変える） |
 | `SprintButton`      | StarterGui/SprintHud     | LocalScript  | 作成済み（左 Ctrl・L3・画面のボタンで走る合図を送る） |
 | `DistanceResult`    | ReplicatedStorage/Remotes | RemoteEvent | 作成済み（サーバー→叩いたプレイヤーへの通知のみ） |
@@ -161,7 +163,7 @@ git管理用の写し（`scripts/`）は、**Studio上の場所をそのまま�
 scripts/
   ReplicatedStorage/Shared/   CombatConfig.lua, ChargeStages.lua, Knockback.lua, HitEffects.lua, HitText.lua など
   ServerScriptService/        CharacterLauncher.lua, ChargeEffects.lua, Ragdoll.lua
-  StarterPack/Bat/            Script.lua, LocalScript.lua
+  ServerStorage/WeaponTemplates/Bat/   Script.lua, LocalScript.lua（バットのひな形）
   StarterGui/DistanceHud/     DistanceDisplay.lua, TargetCamera.lua
   StarterPlayer/StarterPlayerScripts/   HitEffectReceiver.lua
 ```
@@ -170,8 +172,8 @@ scripts/
 
 - Tool の中に `Handle`（剣の見た目）
 - 刃の位置に `Hitbox` という名前のPart：`CanCollide = false`、`Transparency = 1`、`Massless = true`、Handleに溶接
-- Tool の Attribute に `SwordId`（文字列、`CombatConfig.Swords` のキー）
-- Tool は StarterPack に配置
+- Tool の Attribute に `WeaponId`（文字列、`CombatConfig.Weapons` の `Id`）。`WeaponService` が複製するときに付ける
+- Tool のひな形は ServerStorage/WeaponTemplates に置き、`WeaponService` が武器ごとに複製して持ち物に入れる（StarterPack には置かない）
 
 ### 未接続の箇所
 
@@ -209,9 +211,9 @@ distance = power² × sin(2θ) / workspace.Gravity
 
 物理演算は見た目用、記録は計算値を使う。これによりフレームレートやネットワーク状況で結果がブレず、クライアントによる改ざんも成立しない。
 
-- `power = BasePower × 溜め倍率`、`θ = CombatConfig.Launch.Angle`。吹っ飛ばす速度も同じ2つから作る（水平 `power × cosθ`、上向き `power × sinθ`）
+- `power = BasePower × 溜め倍率`、`θ = 打ち出す角度`。強さと角度は武器ごと（`CombatConfig.Weapons`）。吹っ飛ばす速度も同じ2つから作る（水平 `power × cosθ`、上向き `power × sinθ`）
 - 叩く向きは水平成分だけにする。高さの差が混ざると計算値と飛び方がずれる
-- 現在の値（BasePower 64、角度38.7°）で、溜めなし20.4 stud、最大溜め（1.5倍）45.8 stud。実際の体は腰の高さから打ち出されて低い位置に着地するため、計算値より1 studほど遠くに落ちる
+- 木のバットの値（BasePower 64、角度38.7°）で、溜めなし20.4 stud、最大溜め（1.5倍）45.8 stud。実際の体は腰の高さから打ち出されて低い位置に着地するため、計算値より1 studほど遠くに落ちる
 
 ### 飛距離の表示
 
@@ -296,6 +298,36 @@ distance = power² × sin(2θ) / workspace.Gravity
 - 走れるかどうか：サーバーがプレイヤーの属性 `CanSprint` で決める。シングルモードと対戦モードを分ける仕組みがまだないので、今は全員に付けている。対戦モードを作るときは、試合中だけ `CanSprint` を false にする（走っている途中でも歩きに戻る）。プレイヤー側は `CanSprint` があるときだけ操作を受け付け、ボタンを出す
 - 仕組み：プレイヤー側（`SprintButton`）が `Remotes.SprintInput` で走る／歩くを送り、サーバー（`SprintService`）がキャラクターの属性 `Sprinting` に書いて `MovementSpeed` で速さを変える。歩く速さを変えるのは `MovementSpeed` だけにする。サーバーを通すので、押してから速くなるまでに通信の分だけ遅れる
 - リスポーンすると歩きに戻る（`Sprinting` はキャラクターの属性のため）
+
+### 武器（バット）
+
+武器は**バットだけ**（剣は入れない）。武器ごとの違いは**強さ（BasePower）・打ち出す角度・見た目**だけで、振り方・当たり判定・溜めの速さは全部同じ。値は `CombatConfig.Weapons`。決めたことはすべてユーザーの判断（2026-10-06〜10）
+
+- バット（数値は仮。飛距離は power² × sin(2×角度) ÷ 重力。45°で一番遠く、低いと低い弾道、高いと高い弾道）
+
+  | バット | 名前 | レア度 | 強さ | 角度 | 溜めなし | 最大溜め（普通） | 最大溜め（虹） |
+  | ------ | ---- | ------ | ---- | ---- | -------- | ---------------- | -------------- |
+  | 木（元のバット） | Wood | コモン | 64 | 38.7° | 20.4 m | 46 m | 103 m |
+  | 鉄 | Iron | コモン | 67 | 35°（低い弾道） | 21.5 m | 48 m | 109 m |
+  | 銅 | Copper | アンコモン | 70 | 40° | 24.6 m | 55 m | 125 m |
+  | 銀 | Silver | アンコモン | 74 | 37° | 26.8 m | 60 m | 136 m |
+  | 金 | Gold | レア | 78 | 42°（高い弾道） | 30.8 m | 69 m | 156 m |
+
+  - Studio で5本とも溜めなしで叩き、表の値どおりに飛ぶことを確かめた
+  - レア度はバットでは最大**レア**まで。エピック・レジェンドは、剣などを増やすときに使う。強さは金で78くらいに抑える
+- 持ち替え：Roblox 標準の持ち物欄（ホットバー）を使う。キーボードは数字キー（1〜5）、コントローラーは L1（前）・R1（次）、スマホ・タブレットはタップ。一覧の画面は自分で作らない
+  - L1 は会心の発動と重なる。会心が満タンのときだけ発動し、それ以外のときは素通しして標準の持ち替えに渡す（`CriticalButton` は満タンでなければ `Pass` を返す）。Studio で、満タンでなければ持ち替わり、満タンなら発動して持ち替わらないことを確かめた
+  - 持ち物欄には絵ではなく名前を出す（どれも同じバットの絵だと見分けられないため）
+- 作り：バットのひな形（`ServerStorage/WeaponTemplates/Bat`。Script・LocalScript 入り）を1本だけ置き、キャラクターが出るたびに `WeaponService` が武器ごとに複製して持ち物（Backpack）に入れる。スクリプトの元を1つにまとめるため、武器ごとの道具を Studio に並べて置かない
+  - 複製には属性 `WeaponId` を付ける。バットの Script・LocalScript は、持ち物に入った時点で動き出し、`Weapons.fromTool` で自分の強さ・角度を引く（`Knockback.resolve` に渡す）
+  - 角度は、当たった場所の火花・衝撃波の向きにも使う（`HitEffects.play` の `launchAngle`。他のプレイヤーへは `Remotes.HitEffect` に付けて送る）
+- 当面は全員が全部のバットを持つ（仮。宝箱を作るときに、持っている武器だけを配るようにする）。持っている武器は PlayerData を作るまでは保存しない
+- 見た目：木は元の木目のまま。ほかは木目（`Mesh.TextureId`）を外して、部品の色で見せる
+  - 木目を外した部品は、空の光（Lighting の `EnvironmentDiffuseScale` 1）で青っぽく見える。最初の色では鉄が紺、銅がピンクに見えたので、色を暖かいほうへ寄せた
+  - 素材（Metal・Foil・SmoothPlastic）は、今のバットの作り（SpecialMesh）では見た目がほとんど変わらなかった
+  - 大きさ（`Mesh.Scale`）も変えられるが、真ん中を基準に伸びて持つ位置がずれ、当たり判定（`Hitbox`）も別の部品なので、今は変えていない
+- 気を付けること：持ち替えると、振った後のクールダウン（0.4秒）は別のバットには引き継がれない（クールダウンはバットごとのスクリプトが持つため）。持ち替えにも時間がかかるので今は問題にしていない。対戦で問題になったら、クールダウンをキャラクターの属性に持たせる
+- 後で足すもの：武器ごとの固有スキル（InnateSkills）、リーチ・クールダウンの違い、武器ごとの振りのアニメーション、レベルアップ、レア度ごとの見た目（光り方など）
 
 ### タイミングゲージ
 
@@ -382,6 +414,7 @@ distance = power² × sin(2θ) / workspace.Gravity
 - 溜まり方：当たり1回で1つ溜まり、**10回**で満タン（`MaxCharge`）。溜めない振りの当たりも数える。発動中と会心の当たりは数えない。数えるのはサーバー（`CriticalMeter`）で、プレイヤーの属性（`CriticalCharge`・`CriticalActive`）に持たせる。PlayerData ができるまでは、ゲームを抜けると0に戻る
   - 回数の決め方：溜めない振りは最短で約0.6秒に1回当てられる（判定が終わるまで約0.2秒＋クールダウン0.4秒）。30秒のホームランコンテストなら、相手がその場に残る場合で15回は約10〜12秒、10回は約6〜8秒。最後の溜めと狙う時間を残すため10回にした。今は溜めない当たりでも相手が約20m飛び、追いかけると1回約2秒かかるので、コンテストモードを作るとき（相手がその場に残るか）に合わせて調整する
 - 発動：満タンのとき、コントローラーは L1、キーボードは E、スマホ・タブレットは画面のボタンのタップで発動する（ContextActionService と、ボタンの Activated）。R2 で溜めている間も押せる（L1 は左の人差し指なので溜めながら押せる）。プレイヤー側は `Remotes.CriticalActivate` で「発動したい」とだけ伝え、サーバーが満タンかを確かめて発動する
+  - 満タンでないときの L1 は、Roblox 標準の持ち物欄の持ち替え（前のバットへ）に渡す（「武器（バット）」の節を参照）
 - 会心になる条件：R2 を離した合図がサーバーに届いた時点で発動していれば、その振りの当たりが会心。振っている途中に発動したら次の振りから
   - 叩いた本人の演出（当たりの予測）は、離した時点の自分の属性で会心かを決める。発動の直後に離すと、属性がまだ届いておらず見た目だけ会心にならないことがある
 - 消費：**当たるまで持ち越す**。空振りでは消えない。溜めない振りが当たっても消費される。時間切れはない
@@ -526,29 +559,7 @@ distance = power² × sin(2θ) / workspace.Gravity
 **会心の一撃の別の案** 以前の案（会心の一撃は「会心の一撃」の節で実装済み）
 - 以前の案（バットの先端・中間・根元で吹っ飛び率を変える、会心のときは激しい回転・頭から地面に刺さる・空の彼方で星になるなどの派手な吹っ飛び方）も、会心の一撃の演出や別の倍率の候補として残す
 
-**武器（バット）の仕組み** 次に作る候補（2026-10-06に案を出した。まだ数値と操作は決めていない）。宝箱より先に作る（ユーザーの判断）
-- 決めたこと（ユーザーの判断）：武器は**バットだけ**にする（剣は入れない）。武器ごとの違いは、最初は**強さ（BasePower）・打ち出す角度・見た目**だけにする（振り方・当たり判定・溜めの速さは全部同じ）。持っている武器は、PlayerData を作るまでは保存しない
-- 今の状態：武器ごとの性能の表（この仕様書の `CombatConfig.Swords`）はまだない。強さと角度は `CombatConfig.Launch.BasePower`・`Launch.Angle` の1つずつで、全員同じ
-- 案：最初のバット（数値は仮。飛距離は power² × sin(2×角度) ÷ 重力。45°で一番遠く、低いと低い弾道、高いと高い弾道）
-
-  | バット | レア度 | 強さ | 角度 | 溜めなし | 最大溜め（普通） |
-  | ------ | ------ | ---- | ---- | -------- | ---------------- |
-  | 木のバット（今のもの） | コモン | 64 | 38.7° | 20 m | 46 m |
-  | アルミバット | レア | 70 | 36° | 24 m | 53 m |
-  | 鉄のバット | エピック | 76 | 32°（低い弾道） | 26 m | 60 m |
-  | 金のバット | レジェンド | 82 | 42°（高い弾道） | 34 m | 77 m |
-
-- 案：作り
-  - `CombatConfig.Weapons` に、武器ごとの名前・レア度・強さ・角度・見た目（色・光り方・大きさ）を持たせる。今の `Launch.BasePower`・`Launch.Angle` は木のバットの値としてここへ移し、`Knockback.resolve` は装備中の武器の値を使う
-  - 持っている武器（`OwnedWeapons`）と装備中の武器（`EquippedWeapon`）はプレイヤーの属性に持たせ、サーバーが決める
-  - バットのツールは1本のままにして、装備に合わせてサーバーが Handle の見た目を変える（全員に見える）。振り・溜め・ゲージの仕組みを1か所で済ませられる。性能は、振ったときにサーバーが装備中の値を読む
-  - 持ち替え：画面の「武器」ボタンで一覧を開いて選ぶ。サーバーは、持っているか、溜め中・振り中でないかを確かめてから持ち替える
-  - 宝箱ができるまでは手に入れる方法がないので、当面は全員が全部のバットを持っている形にする（仮。宝箱を作るときに外す）
-  - 新しく作るもの：`Remotes.EquipWeapon`、`Weapons`（Shared。武器を引く関数）、`WeaponService`（ServerScriptService。持ち替えの受け付けと見た目の付け替え）、`WeaponMenu`（StarterGui。一覧の画面）
-- 決めること：バットの種類と数値、一覧を開くボタン（案：コントローラー Y、キーボード Q、スマホ・タブレットは画面のボタン）、当面全員が全部持つ形でよいか、見た目の変え方（今のバットのメッシュの色・大きさを変えられるかを Studio で確かめる）
-- 後で足すもの：武器ごとの固有スキル（InnateSkills）、リーチ・クールダウンの違い、武器ごとの振りのアニメーション、レベルアップ
-
-**宝箱とパック** ユーザーのアイデア（2026-10-06）。武器の仕組みを先に作り、宝箱はその後で作る（ユーザーの判断）
+**宝箱とパック** ユーザーのアイデア（2026-10-06）。武器の仕組み（「武器（バット）」の節で実装済み）の次に作る（ユーザーの判断）
 - 宝箱で決めたこと（2026-10-06、ユーザーの判断）：手に入れ方は「マップに置いてあり、近づいて開ける（開けると消え、時間がたつとまた出る）」と「一定の飛距離を超えたごほうび」の両方。最初はパックを挟まず、開けるとアイテムが1つ当たるだけでよい。当たったアイテムは、PlayerData を作るまでは保存しない（ゲームを抜けると消える）。開ける操作は ProximityPrompt にする予定（キーボード・コントローラー・タップに自動で対応する。E は会心の発動に使っているので別のキーにする）
 - 宝箱を手に入れられる。宝箱からはパックが出てくる。パックにはそれぞれレア度がある
 - パックを開けるとカードが出てくる。カードは武器、またはペット（Roblox の「Steal a Brainrot」のようなもの）。出てきたカードから1枚を選んでもらえる

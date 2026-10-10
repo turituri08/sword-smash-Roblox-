@@ -13,9 +13,9 @@ local TargetShake = require(Shared:WaitForChild("TargetShake"))
 local FinishCinematic = require(Shared:WaitForChild("FinishCinematic"))
 local HitText = require(Shared:WaitForChild("HitText"))
 
--- isCritical は会心の一撃か
-ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("HitEffect").OnClientEvent:Connect(function(position, direction, stage, target, gaugeResult, isCritical)
-	HitEffects.play(position, direction, stage, gaugeResult, isCritical)
+-- isCritical は会心の一撃か。launchAngle は叩いた武器の打ち出す角度（火花と衝撃波の向きに使う）
+ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("HitEffect").OnClientEvent:Connect(function(position, direction, stage, target, gaugeResult, isCritical, launchAngle)
+	HitEffects.play(position, direction, stage, gaugeResult, isCritical, launchAngle)
 	TargetShake.play(target, direction, stage, gaugeResult, isCritical)
 	if target ~= Players.LocalPlayer.Character then return end
 	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult, isCritical)

@@ -1,4 +1,6 @@
--- Studio配置: StarterPack > Bat (Tool) > Script（通常のScript。サーバー側で実行される）
+-- Studio配置: ServerStorage > WeaponTemplates > Bat (Tool) > Script（通常のScript。サーバー側で実行される）
+-- バットのひな形。WeaponService がこれを武器ごとに複製して持ち物に入れ、持ち物に入った時点で動き出す。
+-- 強さと角度は、複製に付けた属性 WeaponId から引く（Weapons.fromTool）
 -- 役割: バットのエントリポイント。R2を押す（溜め開始）・離す（振る）・当たりを受けて各モジュールを呼び、
 --       溜め中などのプレイヤーごとの状態を持つ。仕様書の SwordService に相当する処理が
 --       将来的にここから ServerScriptService/SwordService へ移行する想定。
@@ -18,12 +20,14 @@ local ChargeStages = require(ReplicatedStorage.Shared.ChargeStages)
 local Knockback = require(ReplicatedStorage.Shared.Knockback)
 local HitEffects = require(ReplicatedStorage.Shared.HitEffects)
 local TimingGauge = require(ReplicatedStorage.Shared.TimingGauge)
+local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local CharacterLauncher = require(ServerScriptService.CharacterLauncher)
 local ChargeEffects = require(ServerScriptService.ChargeEffects)
 local CriticalMeter = require(ServerScriptService.CriticalMeter)
 local MovementSpeed = require(ServerScriptService.MovementSpeed)
 
 local tool = script.Parent
+local weapon = Weapons.fromTool(tool)
 local hitbox = tool:WaitForChild("Hitbox")
 local distanceResultEvent = ReplicatedStorage.Remotes.DistanceResult
 local hitEffectEvent = ReplicatedStorage.Remotes.HitEffect
@@ -147,13 +151,14 @@ local function tryHit(hitPart)
 		local contactPoint = HitEffects.getContactPoint(hitPart, hitbox.Position)
 		for _, player in ipairs(Players:GetPlayers()) do
 			if player ~= attackerPlayer then
-				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target, swingGaugeResult, swingCritical)
+				hitEffectEvent:FireClient(player, contactPoint, direction, swingStage, target, swingGaugeResult, swingCritical, weapon.Angle)
 			end
 		end
 	end
 
 	local feedback = ChargeStages.getHitFeedback(swingStage, swingGaugeResult, swingCritical)
 	local power, angle = Knockback.resolve(
+		weapon,
 		ChargeStages.getMultiplier(swingStage),
 		TimingGauge.getMultiplier(swingGaugeResult),
 		Knockback.getCriticalMultiplier(swingCritical, swingStage)

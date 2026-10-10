@@ -1,7 +1,7 @@
 -- Studio配置: ServerScriptService > MovementSpeed（ModuleScript）
 -- 役割: キャラクターの歩く速さを、溜め中か・走っているかから決める。
 --       歩く速さを変えるのはここだけにする（溜めと走るがそれぞれ速さを変えると、お互いの値を上書きしてしまうため）。
---       状態はキャラクターの属性に持たせ（Charging は Bat/Script、Sprinting は SprintService が書く）、ここは読むだけ
+--       状態はキャラクターの属性に持たせ（Charging はバットの Script、Sprinting は SprintService が書く）、ここは読むだけ
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")

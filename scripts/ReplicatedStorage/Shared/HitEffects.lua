@@ -254,14 +254,14 @@ end
 
 -- 演出を出す当たりだけ呼ぶ（ChargeStages.hasHitEffects。溜めなしの当たりには、会心でなければ出さない）。
 -- gaugeResult はタイミングゲージの結果（ゲージが出る前に離したなら nil）。虹・緑・赤なら大きさと色が変わる。
--- isCritical は会心の一撃か。会心なら金色にして大きくする
-function HitEffects.play(position, direction, stage, gaugeResult, isCritical)
+-- isCritical は会心の一撃か。会心なら金色にして大きくする。launchAngle は叩いた武器の打ち出す角度（度）
+function HitEffects.play(position, direction, stage, gaugeResult, isCritical, launchAngle)
 	local feedback = ChargeStages.getHitFeedback(stage, gaugeResult, isCritical)
 	local pickColor = getColorPicker(stage, feedback)
 
 	-- 相手が飛ぶ向き（打ち出す角度で斜め上）。衝撃波の輪の面の向きと、火花の飛ぶ向きに使う
-	local launchAngle = math.rad(CombatConfig.Launch.Angle)
-	local launchDirection = direction * math.cos(launchAngle) + Vector3.yAxis * math.sin(launchAngle)
+	local launchRadians = math.rad(launchAngle)
+	local launchDirection = direction * math.cos(launchRadians) + Vector3.yAxis * math.sin(launchRadians)
 
 	-- 相手から弾けるトゲの星。当たった瞬間（バチ）と、押し込まれた相手が飛ぶ瞬間（コーン）の二拍子で出す
 	playBurst(position, feedback.BurstSize, pickColor)

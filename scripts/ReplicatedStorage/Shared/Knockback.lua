@@ -8,12 +8,11 @@ local CombatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 
 local Knockback = {}
 
--- 打撃の強さと角度を決める。timingMultiplier はタイミングゲージの倍率（TimingGauge.getMultiplier）、
+-- 打撃の強さと角度を決める。weapon は CombatConfig.Weapons の1行（Weapons.fromTool）。timingMultiplier はタイミングゲージの倍率（TimingGauge.getMultiplier）、
 -- criticalMultiplier は会心の倍率（Knockback.getCriticalMultiplier）。スキル補正や蓄積ダメージは今後ここに足していく
-function Knockback.resolve(chargeMultiplier, timingMultiplier, criticalMultiplier)
-	local launch = CombatConfig.Launch
-	local power = math.min(launch.BasePower * chargeMultiplier * timingMultiplier * criticalMultiplier, launch.MaxPower)
-	return power, launch.Angle
+function Knockback.resolve(weapon, chargeMultiplier, timingMultiplier, criticalMultiplier)
+	local power = math.min(weapon.BasePower * chargeMultiplier * timingMultiplier * criticalMultiplier, CombatConfig.Launch.MaxPower)
+	return power, weapon.Angle
 end
 
 -- 会心の倍率。会心でなければ1倍。溜めた振り（段階1以上）の会心は、さらに ChargedMultiplier を掛ける
